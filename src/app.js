@@ -131,7 +131,21 @@ function formatPercent(value) {
 // Data model
 // ---------------------------------------------------------------------------
 
+// Works out the body type from the make and model. Checks the model table first (exact match,
+// then the longest listed model the entry starts with, so "RAV4 Adventure" or "F-150 XLT"
+// still resolve), then falls back to a keyword guess.
 function inferVehicleType(car) {
+    const table = modelTable(car.make);
+    const model = String(car.model || '').trim().toLowerCase();
+    if (model) {
+        const keys = Object.keys(table);
+        const exact = keys.find(k => k.toLowerCase() === model);
+        if (exact) return table[exact];
+        const prefix = keys
+            .filter(k => model.startsWith(`${k.toLowerCase()} `) || model.startsWith(`${k.toLowerCase()}-`))
+            .sort((a, b) => b.length - a.length)[0];
+        if (prefix) return table[prefix];
+    }
     const name = `${car.make || ''} ${car.model || ''}`.toLowerCase();
     if (name.includes('grand caravan') || name.includes('odyssey') || name.includes('sienna') || name.includes('pacifica')) return 'Minivan';
     if (name.includes('express') || name.includes('transit') || name.includes('sprinter') || name.includes('promaster')) return 'Van';
@@ -144,7 +158,8 @@ function migrateCarSchema(car) {
     return {
         ...car,
         listedDate: car.listedDate || car.purchaseDate || '',
-        vehicleType: car.vehicleType || inferVehicleType(car)
+        // A type saved earlier is kept; otherwise it comes from the make and model.
+        vehicleType: car.vehicleType && car.vehicleType !== 'Other' ? car.vehicleType : inferVehicleType(car)
     };
 }
 
@@ -175,7 +190,7 @@ function carFromDb(row) {
         year: Number(row.year || 0),
         make: row.make || '',
         model: row.model || '',
-        vehicleType: row.vehicle_type || 'Other',
+        vehicleType: row.vehicle_type || '',
         vin: row.vin || '',
         mileage: Number(row.mileage || 0),
         purchasePrice: Number(row.purchase_price || 0),
@@ -249,7 +264,7 @@ function acquisitionToDb(acq) {
         year: Number(acq.year || 0),
         make: acq.make || '',
         model: acq.model || '',
-        vehicle_type: acq.vehicleType || 'Other',
+        vehicle_type: acq.vehicleType || inferVehicleType(acq),
         vin: acq.vin || null,
         mileage: Number(acq.mileage || 0),
         source: acq.source || 'Other',
@@ -1577,12 +1592,23 @@ function acqDetail(acq) {
 // Actions
 // ---------------------------------------------------------------------------
 
+// Shows the type worked out from the make and model, so there's nothing to pick by hand.
+function updateTypeHint(makeId, modelId, hintId) {
+    const make = $(makeId).value.trim();
+    const model = $(modelId).value.trim();
+    const type = make && model ? inferVehicleType({ make, model }) : '';
+    $(hintId).textContent = !type ? '' : type === 'Other'
+        ? 'Type not recognized. It will be listed as Other.'
+        : type === 'SUV' ? 'Detected as an SUV.' : `Detected as ${/^[AEIOU]/.test(type) ? 'an' : 'a'} ${type.toLowerCase()}.`;
+}
+
 function openNewCar() {
     $('form-add-car').reset();
     const today = localDateISO();
     $('car-purchase-date').value = today;
     $('car-listed-date').value = today;
     $('car-source').value = 'Private Seller';
+    updateTypeHint('car-make', 'car-model', 'car-type-hint');
     openSheet('sheet-add-car');
 }
 
@@ -1602,7 +1628,7 @@ async function handleAddCar(event) {
         purchasePrice: Number($('car-purchase-price').value),
         purchaseDate,
         listedDate: $('car-listed-date').value || purchaseDate,
-        vehicleType: $('car-vehicle-type').value,
+        vehicleType: inferVehicleType({ make: $('car-make').value, model: $('car-model').value }),
         source: $('car-source').value,
         targetPrice: targetRaw === '' ? null : Number(targetRaw),
         status: 'IN_PREP',
@@ -1816,7 +1842,6 @@ function openAcquisitionForm(id = '') {
         set('acq-year', acq.year || '');
         set('acq-make', acq.make);
         set('acq-model', acq.model);
-        set('acq-vehicle-type', acq.vehicleType || 'Other');
         set('acq-mileage', acq.mileage || '');
         set('acq-vin', acq.vin);
         set('acq-source', acq.source || 'Other');
@@ -1832,6 +1857,7 @@ function openAcquisitionForm(id = '') {
         set('acq-notes', acq.notes);
     }
     updateAcquisitionCalculator();
+    updateTypeHint('acq-make', 'acq-model', 'acq-type-hint');
     openSheet('sheet-acquisition');
 }
 
@@ -1855,7 +1881,7 @@ async function handleSaveAcquisition(event) {
         year: Number($('acq-year').value),
         make: $('acq-make').value.trim(),
         model: $('acq-model').value.trim(),
-        vehicleType: $('acq-vehicle-type').value,
+        vehicleType: inferVehicleType({ make: $('acq-make').value, model: $('acq-model').value }),
         vin: $('acq-vin').value.trim().toUpperCase(),
         mileage: acquisitionFormNumber('acq-mileage'),
         source: $('acq-source').value,
@@ -2210,9 +2236,13 @@ function showToast(message, type = 'success') {
 
 const COMMON_MAKES = Object.keys(CAR_MODELS);
 
+function modelTable(make) {
+    const key = COMMON_MAKES.find(m => m.toLowerCase() === String(make || '').trim().toLowerCase());
+    return key ? CAR_MODELS[key] : {};
+}
+
 function modelsForMake(make) {
-    const key = COMMON_MAKES.find(m => m.toLowerCase() === make.trim().toLowerCase());
-    return key ? CAR_MODELS[key] : [];
+    return Object.keys(modelTable(make));
 }
 
 const combos = [];
@@ -2388,9 +2418,7 @@ function initCombos() {
     };
     asSelect('expense-car-id', 'Search cars');
     asSelect('expense-category', 'Search categories');
-    asSelect('car-vehicle-type', 'Type');
     asSelect('car-source', 'Source');
-    asSelect('acq-vehicle-type', 'Type');
     asSelect('acq-source', 'Source');
     asSelect('filter-vehicle-type', 'Any');
 
@@ -2482,6 +2510,10 @@ function wireUI() {
     $('form-acq-won').addEventListener('submit', handleMarkAcquisitionWon);
 
     $('form-acquisition').addEventListener('input', updateAcquisitionCalculator);
+    [['car-make', 'car-model', 'car-type-hint'], ['acq-make', 'acq-model', 'acq-type-hint']].forEach(([makeId, modelId, hintId]) => {
+        const update = () => updateTypeHint(makeId, modelId, hintId);
+        [makeId, modelId].forEach(id => { $(id).addEventListener('input', update); $(id).addEventListener('change', update); });
+    });
     $('sale-price').addEventListener('input', updateSalePreview);
     $('inventory-search').addEventListener('input', renderInventory);
     document.querySelectorAll('[data-filter]').forEach(el => {

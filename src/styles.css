@@ -647,12 +647,20 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     pointer-events: none;
     background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.25) 25%, rgba(0,0,0,.7) 60%, rgba(0,0,0,.96) 100%);
 }
+/* The source video is 640x360. Showing it near its real size, with the edges fading
+   into black, keeps it crisp instead of stretching it full-screen. */
 .automedusa-login-video {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover; object-position: center;
+    position: absolute;
+    left: 50%; top: 40%;
+    width: min(150vw, 760px, 120vh);
+    aspect-ratio: 16 / 9;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
     background: #000;
+    -webkit-mask-image: radial-gradient(ellipse 50% 50% at center, #000 55%, transparent 100%);
+    mask-image: radial-gradient(ellipse 50% 50% at center, #000 55%, transparent 100%);
 }
+@media (max-height: 560px) { .automedusa-login-video { top: 32%; } }
 .automedusa-login-form-wrap {
     position: absolute; z-index: 3;
     left: 0; right: 0; bottom: 0;

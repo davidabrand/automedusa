@@ -239,15 +239,10 @@
                 <label class="field"><span>Year</span><input id="car-year" type="number" inputmode="numeric" min="1980" max="2030" required placeholder="2020"></label>
                 <label class="field"><span>Make</span><input id="car-make" type="text" required placeholder="Toyota" autocapitalize="words"></label>
                 <label class="field"><span>Model</span><input id="car-model" type="text" required placeholder="Camry" autocapitalize="words"></label>
-                <label class="field"><span>Type</span>
-                    <select id="car-vehicle-type">
-                        <option>SUV</option><option>Sedan</option><option>Truck</option><option>Van</option><option>Minivan</option>
-                        <option>Coupe</option><option>Hatchback</option><option>Wagon</option><option>Convertible</option><option>Other</option>
-                    </select>
-                </label>
                 <label class="field"><span>Mileage</span><input id="car-mileage" type="number" inputmode="numeric" min="0" required placeholder="km"></label>
                 <label class="field"><span>VIN</span><input id="car-vin" type="text" maxlength="17" pattern="[A-HJ-NPR-Za-hj-npr-z0-9]{17}" title="17 letters and numbers (no I, O or Q)" autocapitalize="characters" spellcheck="false" placeholder="Optional" class="mono"></label>
             </div>
+            <p class="group-footer type-hint" id="car-type-hint" aria-live="polite"></p>
 
             <div class="group">
                 <label class="field"><span>Paid</span><input id="car-purchase-price" type="number" inputmode="decimal" step="0.01" min="0" required placeholder="$0.00"></label>
@@ -359,15 +354,10 @@
                 <label class="field"><span>Year</span><input id="acq-year" type="number" inputmode="numeric" min="1980" max="2030" required placeholder="2020"></label>
                 <label class="field"><span>Make</span><input id="acq-make" type="text" required placeholder="Toyota" autocapitalize="words"></label>
                 <label class="field"><span>Model</span><input id="acq-model" type="text" required placeholder="RAV4" autocapitalize="words"></label>
-                <label class="field"><span>Type</span>
-                    <select id="acq-vehicle-type">
-                        <option>SUV</option><option>Sedan</option><option>Truck</option><option>Van</option><option>Minivan</option>
-                        <option>Coupe</option><option>Hatchback</option><option>Wagon</option><option>Convertible</option><option>Other</option>
-                    </select>
-                </label>
                 <label class="field"><span>Mileage</span><input id="acq-mileage" type="number" inputmode="numeric" min="0" placeholder="km"></label>
                 <label class="field"><span>VIN</span><input id="acq-vin" type="text" maxlength="17" pattern="[A-HJ-NPR-Za-hj-npr-z0-9]{17}" title="17 letters and numbers (no I, O or Q)" autocapitalize="characters" spellcheck="false" placeholder="Optional" class="mono"></label>
             </div>
+            <p class="group-footer type-hint" id="acq-type-hint" aria-live="polite"></p>
 
             <div class="group">
                 <label class="field"><span>From</span>
