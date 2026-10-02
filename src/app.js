@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import Chart from 'chart.js/auto';
+import CAR_MODELS from './car-models.js';
 
 // No inventory is embedded in this file. It is served publicly, so real customer
 // names, VINs and prices must only ever live in Supabase behind sign-in.
@@ -2207,12 +2208,12 @@ function showToast(message, type = 'success') {
 // options that don't match what you've typed disappear as you type.
 // ---------------------------------------------------------------------------
 
-const COMMON_MAKES = [
-    'Acura', 'Audi', 'BMW', 'Buick', 'Cadillac', 'Chevrolet', 'Chrysler', 'Dodge', 'Fiat', 'Ford',
-    'Genesis', 'GMC', 'Honda', 'Hyundai', 'Infiniti', 'Jaguar', 'Jeep', 'Kia', 'Land Rover', 'Lexus',
-    'Lincoln', 'Mazda', 'Mercedes-Benz', 'Mini', 'Mitsubishi', 'Nissan', 'Porsche', 'Ram', 'Subaru',
-    'Tesla', 'Toyota', 'Volkswagen', 'Volvo'
-];
+const COMMON_MAKES = Object.keys(CAR_MODELS);
+
+function modelsForMake(make) {
+    const key = COMMON_MAKES.find(m => m.toLowerCase() === make.trim().toLowerCase());
+    return key ? CAR_MODELS[key] : [];
+}
 
 const combos = [];
 let comboSeq = 0;
@@ -2404,10 +2405,12 @@ function initCombos() {
     // Make and model suggest from common makes and what's already in your inventory.
     const knownMakes = () => uniqueSorted([...COMMON_MAKES, ...cars.map(c => c.make), ...acquisitions.map(a => a.make)])
         .map(m => ({ value: m, label: m }));
+    // Models for the chosen make: every model on record for it, plus any you've stocked before.
     const knownModels = makeInputId => () => {
         const make = $(makeInputId).value.trim().toLowerCase();
         const pool = [...cars, ...acquisitions].filter(x => !make || (x.make || '').toLowerCase() === make);
-        return uniqueSorted(pool.map(x => x.model)).map(m => ({ value: m, label: m }));
+        const listed = make ? modelsForMake(make) : [];
+        return uniqueSorted([...listed, ...pool.map(x => x.model)]).map(m => ({ value: m, label: m }));
     };
     [['car-make', 'car-model'], ['acq-make', 'acq-model']].forEach(([makeId, modelId]) => {
         createCombo({ kind: 'suggest', input: $(makeId), getOptions: knownMakes, anchor: $(makeId).closest('.field') });
