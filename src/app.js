@@ -1466,7 +1466,6 @@ function renderCharts() {
             chartLoading = import('chart.js/auto').then(mod => {
                 ChartLib = mod.default;
                 ChartLib.defaults.font.family = getComputedStyle(document.body).fontFamily;
-                ChartLib.defaults.color = 'rgba(235, 235, 245, 0.6)';
                 renderCharts();
             }).catch(err => { chartLoading = null; console.warn('Chart failed to load:', err); });
         }
@@ -1479,13 +1478,15 @@ function renderCharts() {
         profitChart.update();
         return;
     }
+    const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    ChartLib.defaults.color = token('--label-2');
     profitChart = new ChartLib(canvas.getContext('2d'), {
         type: 'bar',
         data: {
             labels,
             datasets: [
-                { label: 'Sales', data: sales, backgroundColor: '#0A84FF', borderRadius: 5, borderSkipped: false, maxBarThickness: 22, categoryPercentage: .6, barPercentage: .9 },
-                { label: 'Expenses', data: spend, backgroundColor: '#FF9F0A', borderRadius: 5, borderSkipped: false, maxBarThickness: 22, categoryPercentage: .6, barPercentage: .9 }
+                { label: 'Sales', data: sales, backgroundColor: token('--tint'), borderRadius: 5, borderSkipped: false, maxBarThickness: 22, categoryPercentage: .6, barPercentage: .9 },
+                { label: 'Expenses', data: spend, backgroundColor: token('--orange'), borderRadius: 5, borderSkipped: false, maxBarThickness: 22, categoryPercentage: .6, barPercentage: .9 }
             ]
         },
         options: {
@@ -1496,7 +1497,8 @@ function renderCharts() {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: 'rgba(44, 44, 46, .95)', padding: 10, cornerRadius: 10,
+                    backgroundColor: token('--toast-bg'), titleColor: token('--label'), bodyColor: token('--label'),
+                    borderColor: token('--separator'), borderWidth: 0.5, padding: 10, cornerRadius: 10,
                     titleFont: { size: 13, weight: '600' }, bodyFont: { size: 13 }, displayColors: true, boxPadding: 4,
                     callbacks: { label: ctx => ` ${ctx.dataset.label}: ${formatWhole(ctx.parsed.y)}` }
                 }
@@ -1505,7 +1507,7 @@ function renderCharts() {
                 x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 12 } } },
                 y: {
                     position: 'right',
-                    grid: { color: 'rgba(84, 84, 88, 0.35)', drawTicks: false },
+                    grid: { color: token('--separator'), drawTicks: false },
                     border: { display: false },
                     ticks: { font: { size: 12 }, padding: 8, maxTicksLimit: 4, callback: val => formatCurrencyCompact(val) }
                 }
@@ -1539,6 +1541,10 @@ function refreshDetail() {
     const render = { car: carDetail, expense: expenseDetail, acq: acqDetail }[kind];
     const { title, html } = render(record);
     $('detail-title').textContent = title;
+    const editBtn = $('detail-edit');
+    editBtn.hidden = false;
+    editBtn.dataset.action = { car: 'edit-car', expense: 'edit-expense', acq: 'edit-acq' }[kind];
+    editBtn.dataset.id = id;
     $('detail-body').innerHTML = html;
     return true;
 }
@@ -1579,8 +1585,7 @@ function carDetail(car) {
     const actions = actionButtons([
         prep && { label: 'Ready for sale', action: 'ready-car', id, primary: true },
         (car.status === 'FOR_SALE' || car.status === 'PENDING') && { label: 'Record sale', action: 'sell-car', id, primary: true },
-        { label: 'Add expense', action: 'new-expense-for', id },
-        { label: 'Edit', action: 'edit-car', id }
+        { label: 'Add expense', action: 'new-expense-for', id }
     ]);
 
     const money = `<div class="group">
@@ -1617,7 +1622,6 @@ function carDetail(car) {
 function expenseDetail(exp) {
     const car = cars.find(c => c.id === exp.carId);
     const html = heroBlock(formatCurrency(exp.amount), categoryLabel(exp.category))
-        + actionButtons([{ label: 'Edit', action: 'edit-expense', id: exp.id }])
         + `<div class="group">
             ${car
                 ? `<button type="button" class="field field-action" data-action="view-car" data-id="${esc(car.id)}"><span style="color:var(--label)">For</span><span class="field-value" style="color:var(--tint)">${esc(vehicleName(car))}</span></button>`
@@ -1642,8 +1646,7 @@ function acqDetail(acq) {
         : heroBlock(formatWhole(acq.currentBid), over ? `Current bid, over your ${formatWhole(safe)} safe limit` : 'Current bid', over ? 'red' : '');
 
     const actions = actionButtons([
-        transit ? { label: 'Mark arrived', action: 'arrived', id, primary: true } : { label: 'Mark as won', action: 'won-acq', id, primary: true },
-        { label: 'Edit', action: 'edit-acq', id }
+        transit ? { label: 'Mark arrived', action: 'arrived', id, primary: true } : { label: 'Mark as won', action: 'won-acq', id, primary: true }
     ]);
 
     const numbers = `<div class="group">
@@ -3179,6 +3182,11 @@ function wireUI() {
 
     initCombos();
     watchLargeTitles();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        profitChart?.destroy();
+        profitChart = null;
+        renderCharts();
+    });
 }
 
 // Initialize on page load

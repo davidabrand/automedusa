@@ -6,19 +6,35 @@
    Tokens: iOS dark system colors and type scale
    ============================================================================= */
 :root {
-    --bg: #000000;
-    --surface: #1C1C1E;           /* lists on the page, sidebar, sheets */
-    --surface-raised: #2C2C2E;    /* rows inside a sheet */
-    --fill: rgba(118, 118, 128, 0.24);
-    --fill-strong: rgba(118, 118, 128, 0.36);
+    /* iOS system colors, dark appearance */
+    --bg: #000000;                                  /* systemGroupedBackground */
+    --surface: #1C1C1E;                             /* secondarySystemGroupedBackground: lists */
+    --sheet-bg: #1C1C1E;                            /* sheets */
+    --surface-raised: #2C2C2E;                      /* rows inside a sheet */
+    --sidebar-bg: #1C1C1E;
+    --sidebar-selected: rgba(255, 255, 255, 0.1);
+    --fill: rgba(118, 118, 128, 0.24);              /* tertiarySystemFill: search, segmented */
+    --fill-strong: rgba(120, 120, 128, 0.36);       /* systemFill */
     --label: #FFFFFF;
-    --label-2: rgba(235, 235, 245, 0.6);
-    --label-3: rgba(235, 235, 245, 0.3);
-    --separator: rgba(84, 84, 88, 0.6);
-    --tint: #0A84FF;
+    --label-2: rgba(235, 235, 245, 0.6);            /* secondaryLabel */
+    --label-3: rgba(235, 235, 245, 0.3);            /* tertiaryLabel */
+    --separator: rgba(84, 84, 88, 0.65);
+    --tint: #0A84FF;                                /* systemBlue */
+    --tint-fill: rgba(10, 132, 255, 0.18);          /* tinted button background */
     --green: #30D158;
     --red: #FF453A;
     --orange: #FF9F0A;
+    --gray: #8E8E93;
+    --hover: rgba(255, 255, 255, 0.05);
+    --press: rgba(255, 255, 255, 0.09);
+    --chrome: rgba(22, 22, 23, 0.8);                /* bar material */
+    --menu-bg: rgba(37, 37, 39, 0.9);
+    --menu-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+    --alert-bg: rgba(37, 37, 39, 0.94);
+    --toast-bg: rgba(44, 44, 46, 0.94);
+    --toast-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+    --seg-thumb: #636366;
+    --dim: rgba(0, 0, 0, 0.5);
 
     --group-bg: var(--surface);
     --radius-group: 12px;
@@ -28,7 +44,75 @@
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-html { background: var(--bg); color-scheme: dark; }
+@media (prefers-color-scheme: light) {
+    :root {
+        /* iOS system colors, light appearance */
+        --bg: #F2F2F7;
+        --surface: #FFFFFF;
+        --sheet-bg: #F2F2F7;
+        --surface-raised: #FFFFFF;
+        --sidebar-bg: #EBEBF0;
+        --sidebar-selected: rgba(0, 0, 0, 0.08);
+        --fill: rgba(118, 118, 128, 0.12);
+        --fill-strong: rgba(120, 120, 128, 0.2);
+        --label: #000000;
+        --label-2: rgba(60, 60, 67, 0.6);
+        --label-3: rgba(60, 60, 67, 0.3);
+        --separator: rgba(60, 60, 67, 0.29);
+        --tint: #007AFF;
+        --tint-fill: rgba(0, 122, 255, 0.12);
+        --green: #34C759;
+        --red: #FF3B30;
+        --orange: #FF9500;
+        --gray: #8E8E93;
+        --hover: rgba(0, 0, 0, 0.04);
+        --press: rgba(0, 0, 0, 0.07);
+        --chrome: rgba(249, 249, 249, 0.86);
+        --menu-bg: rgba(250, 250, 250, 0.9);
+        --menu-shadow: 0 10px 40px rgba(0, 0, 0, 0.18), inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+        --alert-bg: rgba(242, 242, 242, 0.96);
+        --toast-bg: rgba(255, 255, 255, 0.97);
+        --toast-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+        --seg-thumb: #FFFFFF;
+        --dim: rgba(0, 0, 0, 0.35);
+    }
+}
+
+html { background: var(--bg); color-scheme: light dark; }
+
+/* Sign-in (over the video) and the photo viewer always use the dark appearance, like Apple's media screens. */
+.automedusa-video-login, .photo-viewer {
+    color-scheme: dark;
+    --bg: #000000;                                  /* systemGroupedBackground */
+    --surface: #1C1C1E;                             /* secondarySystemGroupedBackground: lists */
+    --sheet-bg: #1C1C1E;                            /* sheets */
+    --surface-raised: #2C2C2E;                      /* rows inside a sheet */
+    --sidebar-bg: #1C1C1E;
+    --sidebar-selected: rgba(255, 255, 255, 0.1);
+    --fill: rgba(118, 118, 128, 0.24);              /* tertiarySystemFill: search, segmented */
+    --fill-strong: rgba(120, 120, 128, 0.36);       /* systemFill */
+    --label: #FFFFFF;
+    --label-2: rgba(235, 235, 245, 0.6);            /* secondaryLabel */
+    --label-3: rgba(235, 235, 245, 0.3);            /* tertiaryLabel */
+    --separator: rgba(84, 84, 88, 0.65);
+    --tint: #0A84FF;                                /* systemBlue */
+    --tint-fill: rgba(10, 132, 255, 0.18);          /* tinted button background */
+    --green: #30D158;
+    --red: #FF453A;
+    --orange: #FF9F0A;
+    --gray: #8E8E93;
+    --hover: rgba(255, 255, 255, 0.05);
+    --press: rgba(255, 255, 255, 0.09);
+    --chrome: rgba(22, 22, 23, 0.8);                /* bar material */
+    --menu-bg: rgba(37, 37, 39, 0.9);
+    --menu-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+    --alert-bg: rgba(37, 37, 39, 0.94);
+    --toast-bg: rgba(44, 44, 46, 0.94);
+    --toast-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+    --seg-thumb: #636366;
+    --dim: rgba(0, 0, 0, 0.5);
+    color: var(--label);
+}
 
 body {
     margin: 0;
@@ -66,7 +150,7 @@ body.sheet-open { overflow: hidden; }
         display: flex;
         flex-direction: column;
         padding: 18px 10px 12px;
-        background: var(--surface);
+        background: var(--sidebar-bg);
         z-index: 40;
     }
     .main-col { margin-left: 240px; }
@@ -90,9 +174,8 @@ body.sheet-open { overflow: hidden; }
     transition: background-color .15s ease;
 }
 .nav-link .icon { width: 18px; height: 18px; color: var(--tint); }
-@media (hover: hover) { .nav-link:hover { background: rgba(255, 255, 255, .06); } }
-.nav-link[aria-current="page"] { background: var(--tint); }
-.nav-link[aria-current="page"] .icon { color: #fff; }
+@media (hover: hover) { .nav-link:hover { background: var(--hover); } }
+.nav-link[aria-current="page"] { background: var(--sidebar-selected); font-weight: 600; }
 
 .sidebar-account {
     margin-top: auto;
@@ -102,7 +185,7 @@ body.sheet-open { overflow: hidden; }
     text-align: left;
     transition: background-color .15s ease;
 }
-@media (hover: hover) { .sidebar-account:hover { background: rgba(255, 255, 255, .06); } }
+@media (hover: hover) { .sidebar-account:hover { background: var(--hover); } }
 .sidebar-account-text { display: grid; min-width: 0; }
 .sidebar-account-email { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-account-sync { font-size: 12px; color: var(--label-2); }
@@ -111,7 +194,7 @@ body.sheet-open { overflow: hidden; }
     position: relative;
     display: inline-grid; place-items: center;
     width: 30px; height: 30px; border-radius: 50%;
-    background: linear-gradient(180deg, #8E8E93, #636366);
+    background: linear-gradient(180deg, #A5ABB6, #858993);
     font-size: 13px; font-weight: 600; color: #fff;
     flex-shrink: 0;
 }
@@ -122,7 +205,7 @@ body.sheet-open { overflow: hidden; }
     background: #8E8E93;
     box-shadow: 0 0 0 2px var(--bg);
 }
-.sidebar .sync-dot { box-shadow: 0 0 0 2px var(--surface); }
+.sidebar .sync-dot { box-shadow: 0 0 0 2px var(--sidebar-bg); }
 .sync-dot[data-state="synced"] { background: var(--green); }
 .sync-dot[data-state="syncing"], .sync-dot[data-state="pending"] { background: var(--orange); }
 .sync-dot[data-state="error"] { background: var(--red); }
@@ -137,7 +220,7 @@ body.sheet-open { overflow: hidden; }
     transition: background-color .25s ease, box-shadow .25s ease, -webkit-backdrop-filter .25s ease, backdrop-filter .25s ease;
 }
 .navbar.scrolled {
-    background: rgba(18, 18, 18, .72);
+    background: var(--chrome);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     backdrop-filter: saturate(180%) blur(20px);
     box-shadow: inset 0 -0.5px 0 var(--separator);
@@ -178,10 +261,10 @@ body.sheet-open { overflow: hidden; }
     width: 230px;
     padding: 4px 0;
     border-radius: 13px;
-    background: rgba(37, 37, 39, .88);
+    background: var(--menu-bg);
     -webkit-backdrop-filter: saturate(180%) blur(30px);
     backdrop-filter: saturate(180%) blur(30px);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(255, 255, 255, .08);
+    box-shadow: var(--menu-shadow);
     transform-origin: top right;
     transform: scale(.85);
     opacity: 0;
@@ -196,8 +279,8 @@ body.sheet-open { overflow: hidden; }
     font-size: 17px; text-align: left;
 }
 .menu button + button { box-shadow: inset 0 .5px 0 var(--separator); }
-.menu button:active { background: rgba(255, 255, 255, .08); }
-@media (hover: hover) { .menu button:hover { background: rgba(255, 255, 255, .08); } }
+.menu button:active { background: var(--press); }
+@media (hover: hover) { .menu button:hover { background: var(--hover); } }
 .menu button .icon { color: var(--label); width: 19px; height: 19px; }
 
 /* Content column */
@@ -292,8 +375,8 @@ body.sheet-open { overflow: hidden; }
     text-align: left;
     transition: background-color .2s ease;
 }
-@media (hover: hover) { button.row:hover { background: rgba(255, 255, 255, .05); } }
-button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0s; }
+@media (hover: hover) { button.row:hover { background: var(--hover); } }
+button.row:active { background: var(--press); transition-duration: 0s; }
 .row.compact { min-height: 44px; }
 .row-main { flex: 1; min-width: 0; display: grid; }
 .row-title { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -309,11 +392,11 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .tone-orange { color: var(--orange); }
 .tone-blue { color: var(--tint); }
 
-.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: #8E8E93; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--gray); }
 .dot-blue { background: var(--tint); }
 .dot-green { background: var(--green); }
 .dot-orange { background: var(--orange); }
-.dot-gray { background: #8E8E93; }
+.dot-gray { background: var(--gray); }
 .list.dotted { --sep-inset: 37px; }
 
 .list-head { display: none; }
@@ -391,7 +474,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     width: calc((100% - 4px) / var(--n));
     transform: translateX(calc(var(--i) * 100%));
     border-radius: 7px;
-    background: #636366;
+    background: var(--seg-thumb);
     box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 3px 1px rgba(0, 0, 0, .04);
     transition: transform .35s var(--ease-sheet);
 }
@@ -415,6 +498,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 
 .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    white-space: nowrap;
     height: 50px; padding: 0 20px;
     border-radius: 12px;
     font-size: 17px; font-weight: 600;
@@ -422,7 +506,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 }
 .btn:active { transform: scale(.98); opacity: .85; }
 .btn-primary { background: var(--tint); color: #fff; }
-.btn-secondary { background: var(--fill); color: var(--tint); }
+.btn-secondary { background: var(--tint-fill); color: var(--tint); }
 .btn-small { height: 34px; padding: 0 16px; border-radius: 17px; font-size: 15px; }
 
 /* =============================================================================
@@ -433,7 +517,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
     height: var(--tabbar-h);
     padding: 0 max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-left));
-    background: rgba(18, 18, 18, .8);
+    background: var(--chrome);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     backdrop-filter: saturate(180%) blur(20px);
     box-shadow: inset 0 .5px 0 var(--separator);
@@ -441,7 +525,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .tab-bar button {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     font-size: 10px; font-weight: 500;
-    color: #8E8E93;
+    color: var(--gray);
     touch-action: manipulation;
     transition: color .2s ease;
 }
@@ -455,7 +539,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
    ============================================================================= */
 .sheet-backdrop {
     position: fixed; inset: 0; z-index: 90;
-    background: rgba(0, 0, 0, .5);
+    background: var(--dim);
     opacity: 0; pointer-events: none;
     transition: opacity .4s var(--ease-sheet);
 }
@@ -467,7 +551,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     left: 0; right: 0; bottom: var(--kb, 0px);
     max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top) - 10px);
     display: flex; flex-direction: column;
-    background: var(--surface);
+    background: var(--sheet-bg);
     border-radius: 14px 14px 0 0;
     transform: translateY(100%);
     visibility: hidden;
@@ -556,10 +640,10 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .field input::-webkit-calendar-picker-indicator { filter: invert(1) opacity(.45); }
 .field-stack textarea { text-align: left; resize: vertical; min-height: 80px; color: var(--label); }
 .field-value { margin-left: auto; color: var(--label-2); text-align: right; }
-.field:focus-within { background: rgba(255, 255, 255, .03); }
+.field:focus-within { background: var(--hover); }
 .field:has(:user-invalid) > span:first-child { color: var(--red); }
 .field-action { color: var(--tint); transition: background-color .2s ease; }
-.field-action:active { background: rgba(255, 255, 255, .08); transition-duration: 0s; }
+.field-action:active { background: var(--press); transition-duration: 0s; }
 .field-action.destructive, .destructive { color: var(--red); }
 .form > .segmented { margin: 0 0 20px; }
 
@@ -592,7 +676,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .alert {
     width: min(290px, 100%);
     border-radius: 14px;
-    background: rgba(37, 37, 39, .94);
+    background: var(--alert-bg);
     -webkit-backdrop-filter: saturate(180%) blur(30px);
     backdrop-filter: saturate(180%) blur(30px);
     overflow: hidden;
@@ -606,7 +690,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .alert-actions button { min-height: 44px; font-size: 17px; color: var(--tint); }
 .alert-actions button + button { box-shadow: inset .5px 0 0 var(--separator); font-weight: 600; }
 .alert-actions button.destructive { color: var(--red); }
-.alert-actions button:active { background: rgba(255, 255, 255, .08); }
+.alert-actions button:active { background: var(--press); }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes alert-in { from { opacity: 0; transform: scale(1.12); } }
 
@@ -617,17 +701,18 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     max-width: min(90vw, 420px);
     padding: 10px 18px;
     border-radius: 22px;
-    background: rgba(44, 44, 46, .92);
+    background: var(--toast-bg);
+    color: var(--label);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     backdrop-filter: saturate(180%) blur(20px);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, .4);
+    box-shadow: var(--toast-shadow);
     font-size: 15px; font-weight: 500; text-align: center;
     transform: translate(-50%, calc(-100% - 30px));
     transition: transform .45s var(--ease-sheet);
     pointer-events: none;
 }
 .toast.show { transform: translate(-50%, 0); }
-.toast.error { color: #FF9A94; }
+.toast.error { color: var(--red); }
 
 /* =============================================================================
    Sign in
@@ -698,7 +783,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .login-submit:disabled { opacity: .6; }
 .login-link { justify-self: center; min-height: 44px; padding: 0 12px; font-size: 15px; color: var(--tint); }
 .login-message { margin: 0 4px; font-size: 15px; color: var(--label-2); text-align: center; }
-.login-message.error { color: #FF9A94; }
+.login-message.error { color: var(--red); }
 @media (max-height: 560px) {
     .login-title { display: none; }
     .automedusa-login-fields { gap: 8px; }
@@ -741,7 +826,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     max-height: 264px;
     overflow-y: auto;
     overscroll-behavior: contain;
-    background: rgba(255, 255, 255, .025);
+    background: var(--hover);
 }
 .combo-list.open { display: block; animation: combo-in .22s var(--ease-out); }
 @keyframes combo-in { from { opacity: 0; transform: translateY(-4px); } }
@@ -752,8 +837,8 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     cursor: pointer;
 }
 .combo-option + .combo-option { box-shadow: inset 28px .5px 0 -27.5px var(--separator); }
-.combo-option.active { background: rgba(255, 255, 255, .07); }
-@media (hover: hover) { .combo-option:hover { background: rgba(255, 255, 255, .07); } }
+.combo-option.active { background: var(--press); }
+@media (hover: hover) { .combo-option:hover { background: var(--hover); } }
 .combo-option .icon { color: var(--tint); width: 17px; height: 17px; }
 .combo-empty { padding: 12px 28px; font-size: 15px; color: var(--label-2); }
 
@@ -774,10 +859,10 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     top: calc(100% + 6px); left: 0;
     width: 260px;
     border-radius: 13px;
-    background: rgba(37, 37, 39, .94);
+    background: var(--menu-bg);
     -webkit-backdrop-filter: saturate(180%) blur(30px);
     backdrop-filter: saturate(180%) blur(30px);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(255, 255, 255, .08);
+    box-shadow: var(--menu-shadow);
 }
 .combo-popover .combo-option { padding-left: 16px; }
 
@@ -854,7 +939,7 @@ html, body { overscroll-behavior-y: none; }
 .toast.has-action { pointer-events: auto; padding-right: 8px; }
 .toast-action {
     padding: 6px 12px; border-radius: 14px;
-    background: rgba(255, 255, 255, .12);
+    background: var(--tint-fill);
     color: var(--tint); font-size: 15px; font-weight: 600;
 }
 

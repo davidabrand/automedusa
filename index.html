@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="color-scheme" content="dark">
-    <meta name="theme-color" content="#000000">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="AutoMedusa">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -484,7 +485,7 @@
 <div class="sheet" id="sheet-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title">
     <div class="sheet-grabber" aria-hidden="true"></div>
     <header class="sheet-header">
-        <span></span>
+        <button type="button" class="sheet-btn" id="detail-edit">Edit</button>
         <h2 id="detail-title">Details</h2>
         <button type="button" class="sheet-btn strong" data-action="close-sheet">Done</button>
     </header>
