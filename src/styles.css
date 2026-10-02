@@ -89,10 +89,10 @@ body.sheet-open { overflow: hidden; }
     color: var(--label);
     transition: background-color .15s ease;
 }
-.nav-link i { width: 18px; text-align: center; color: var(--tint); font-size: 15px; }
-.nav-link:hover { background: rgba(255, 255, 255, .06); }
+.nav-link .icon { width: 18px; height: 18px; color: var(--tint); }
+@media (hover: hover) { .nav-link:hover { background: rgba(255, 255, 255, .06); } }
 .nav-link[aria-current="page"] { background: var(--tint); }
-.nav-link[aria-current="page"] i { color: #fff; }
+.nav-link[aria-current="page"] .icon { color: #fff; }
 
 .sidebar-account {
     margin-top: auto;
@@ -102,7 +102,7 @@ body.sheet-open { overflow: hidden; }
     text-align: left;
     transition: background-color .15s ease;
 }
-.sidebar-account:hover { background: rgba(255, 255, 255, .06); }
+@media (hover: hover) { .sidebar-account:hover { background: rgba(255, 255, 255, .06); } }
 .sidebar-account-text { display: grid; min-width: 0; }
 .sidebar-account-email { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-account-sync { font-size: 12px; color: var(--label-2); }
@@ -159,7 +159,6 @@ body.sheet-open { overflow: hidden; }
     width: 34px; height: 34px; border-radius: 50%;
     background: var(--fill);
     color: var(--tint);
-    font-size: 16px;
     transition: transform .15s ease, background-color .15s ease;
 }
 .icon-btn:active { transform: scale(.92); background: var(--fill-strong); }
@@ -197,8 +196,9 @@ body.sheet-open { overflow: hidden; }
     font-size: 17px; text-align: left;
 }
 .menu button + button { box-shadow: inset 0 .5px 0 var(--separator); }
-.menu button:active, .menu button:hover { background: rgba(255, 255, 255, .08); }
-.menu button i { color: var(--label); font-size: 15px; width: 20px; text-align: center; }
+.menu button:active { background: rgba(255, 255, 255, .08); }
+@media (hover: hover) { .menu button:hover { background: rgba(255, 255, 255, .08); } }
+.menu button .icon { color: var(--label); width: 19px; height: 19px; }
 
 /* Content column */
 .content {
@@ -292,7 +292,7 @@ body.sheet-open { overflow: hidden; }
     text-align: left;
     transition: background-color .2s ease;
 }
-button.row:active, button.row:hover { background: rgba(255, 255, 255, .05); }
+@media (hover: hover) { button.row:hover { background: rgba(255, 255, 255, .05); } }
 button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0s; }
 .row.compact { min-height: 44px; }
 .row-main { flex: 1; min-width: 0; display: grid; }
@@ -300,7 +300,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .row-sub { font-size: 15px; color: var(--label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-trail { display: grid; justify-items: end; text-align: right; flex-shrink: 0; }
 .row-value { font-size: 17px; }
-.row-chevron { color: var(--label-3); font-size: 13px; margin-left: -2px; }
+.row-chevron { color: var(--label-3); width: 14px; height: 14px; margin-left: -2px; flex-shrink: 0; stroke-width: 2.4; }
 .row-col { display: none; font-size: 15px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row.strong .row-title, .row.strong .row-value { font-weight: 600; }
 
@@ -411,7 +411,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     cursor: pointer; outline: none;
     field-sizing: content; /* hug the chosen option so the arrow sits right after it */
 }
-.plain-select i { font-size: 11px; pointer-events: none; }
+.plain-select .icon { width: 13px; height: 13px; pointer-events: none; }
 
 .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -445,8 +445,8 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     touch-action: manipulation;
     transition: color .2s ease;
 }
-.tab-bar button i { font-size: 20px; transition: transform .2s var(--ease-out); }
-.tab-bar button:active i { transform: scale(.88); }
+.tab-bar button .icon { width: 25px; height: 25px; stroke-width: 1.8; transition: transform .2s var(--ease-out); }
+.tab-bar button:active .icon { transform: scale(.88); }
 .tab-bar button[aria-current="page"] { color: var(--tint); }
 @media (min-width: 768px) { .tab-bar { display: none; } }
 
@@ -464,8 +464,8 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 .sheet {
     --group-bg: var(--surface-raised);
     position: fixed; z-index: 100;
-    left: 0; right: 0; bottom: 0;
-    max-height: calc(100dvh - env(safe-area-inset-top) - 10px);
+    left: 0; right: 0; bottom: var(--kb, 0px);
+    max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top) - 10px);
     display: flex; flex-direction: column;
     background: var(--surface);
     border-radius: 14px 14px 0 0;
@@ -503,7 +503,7 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 
 @media (min-width: 768px) {
     .sheet {
-        left: 50%; top: 50%; bottom: auto; right: auto;
+        left: 50%; top: 50%; bottom: auto !important; right: auto;
         width: min(560px, calc(100vw - 48px));
         max-height: min(86vh, 780px);
         border-radius: 14px;
@@ -663,7 +663,8 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
 @media (max-height: 560px) { .automedusa-login-video { top: 32%; } }
 .automedusa-login-form-wrap {
     position: absolute; z-index: 3;
-    left: 0; right: 0; bottom: 0;
+    left: 0; right: 0; bottom: var(--kb, 0px);
+    transition: bottom .25s var(--ease-out);
     display: flex; justify-content: center;
     padding: 0 max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     animation: login-in .8s var(--ease-out) .15s both;
@@ -751,8 +752,9 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     cursor: pointer;
 }
 .combo-option + .combo-option { box-shadow: inset 28px .5px 0 -27.5px var(--separator); }
-.combo-option.active, .combo-option:hover { background: rgba(255, 255, 255, .07); }
-.combo-option i { color: var(--tint); font-size: 14px; }
+.combo-option.active { background: rgba(255, 255, 255, .07); }
+@media (hover: hover) { .combo-option:hover { background: rgba(255, 255, 255, .07); } }
+.combo-option .icon { color: var(--tint); width: 17px; height: 17px; }
 .combo-empty { padding: 12px 28px; font-size: 15px; color: var(--label-2); }
 
 /* Hidden car row (overhead expense) and its closed list shouldn't leave a line at the top. */
@@ -778,3 +780,124 @@ button.row:active { background: rgba(255, 255, 255, .09); transition-duration: 0
     box-shadow: 0 10px 40px rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(255, 255, 255, .08);
 }
 .combo-popover .combo-option { padding-left: 16px; }
+
+
+/* =============================================================================
+   Icons (built in, no outside font)
+   ============================================================================= */
+.icon {
+    width: 1em; height: 1em;
+    fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+    flex-shrink: 0;
+}
+.icon-btn .icon { width: 19px; height: 19px; stroke-width: 2.2; }
+.search .icon { width: 17px; height: 17px; }
+.icon-trail { margin-left: auto; width: 15px; height: 15px; }
+
+/* No browser pull-to-refresh fighting ours. */
+html, body { overscroll-behavior-y: none; }
+
+/* =============================================================================
+   Period switcher
+   ============================================================================= */
+.period-segment { margin-top: 14px; }
+
+/* Status picker in a car's details */
+.field-select-tint { color: var(--tint) !important; }
+
+/* =============================================================================
+   Swipe left on a row to delete (touch)
+   ============================================================================= */
+.list > li.swipe { position: relative; overflow: hidden; }
+.swipe > .row {
+    position: relative; z-index: 1;
+    background: var(--group-bg);
+    touch-action: pan-y;
+    transition: transform .3s var(--ease-sheet), background-color .2s ease;
+}
+.swipe > .row.dragging { transition: none; }
+.swipe-delete {
+    position: absolute; z-index: 0; top: 0; right: 0; bottom: 0;
+    width: 88px;
+    background: var(--red); color: #fff;
+    font-size: 15px; font-weight: 600;
+}
+@media (hover: hover) and (pointer: fine) { .swipe-delete { display: none; } }
+
+/* =============================================================================
+   Pull to refresh
+   ============================================================================= */
+.ptr {
+    position: fixed; z-index: 25;
+    top: calc(env(safe-area-inset-top) + 8px); left: 50%;
+    width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--surface-raised);
+    color: var(--label-2);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .4);
+    transform: translate(-50%, -60px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .3s var(--ease-sheet), opacity .2s ease;
+}
+.ptr .icon { width: 18px; height: 18px; }
+.ptr.ready { color: var(--tint); }
+.ptr.loading .icon { animation: spin .8s linear infinite; color: var(--tint); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (min-width: 768px) { .ptr { left: calc(50% + 120px); } }
+
+/* =============================================================================
+   Toast with an action (Undo)
+   ============================================================================= */
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast.has-action { pointer-events: auto; padding-right: 8px; }
+.toast-action {
+    padding: 6px 12px; border-radius: 14px;
+    background: rgba(255, 255, 255, .12);
+    color: var(--tint); font-size: 15px; font-weight: 600;
+}
+
+/* =============================================================================
+   Photos
+   ============================================================================= */
+.photos {
+    display: flex; gap: 8px;
+    overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    margin: 0 -16px 24px; padding: 0 16px;
+    scrollbar-width: none;
+}
+.photos::-webkit-scrollbar { display: none; }
+.photo-add, .photo-thumb {
+    flex: 0 0 auto;
+    width: 104px; height: 78px;
+    border-radius: 10px;
+    overflow: hidden;
+    scroll-snap-align: start;
+}
+.photo-add {
+    display: grid; place-items: center; align-content: center; gap: 4px;
+    background: var(--surface-raised);
+    color: var(--tint); font-size: 13px; font-weight: 500;
+}
+.photo-add .icon { width: 22px; height: 22px; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--surface-raised); }
+.photo-note { align-self: center; margin: 0 4px; font-size: 13px; color: var(--label-2); white-space: nowrap; }
+
+.photo-viewer {
+    position: fixed; inset: 0; z-index: 180;
+    display: grid; grid-template-rows: 1fr auto;
+    background: #000;
+    animation: fade-in .2s ease;
+}
+.photo-viewer img { width: 100%; height: 100%; object-fit: contain; min-height: 0; }
+.photo-viewer-bar {
+    display: flex; justify-content: space-between;
+    padding: 8px 20px max(12px, env(safe-area-inset-bottom));
+}
+.photo-viewer-btn { min-height: 44px; font-size: 17px; color: var(--tint); }
+.photo-viewer-btn.strong { font-weight: 600; }
+.photo-viewer-btn.destructive { color: var(--red); }
+
+.link-btn.destructive { color: var(--red); }

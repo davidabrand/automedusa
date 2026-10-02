@@ -53,3 +53,33 @@ case restrict policies to a list of allowed user IDs or a `dealership_members` t
 For "Forgot password?" to work, add the site URL (for example
 `https://<you>.github.io/automedusa/`) under
 Authentication → URL Configuration → Redirect URLs.
+
+## 5. Car photos (one-time setup)
+
+Photos are stored in a private Supabase Storage bucket called `car-photos`, in a
+folder per car. Run this once in the SQL editor. It uses the same owner ID as
+your other policies, so only your account can see or change photos.
+
+```sql
+insert into storage.buckets (id, name, public)
+values ('car-photos', 'car-photos', false)
+on conflict (id) do nothing;
+
+create policy "AutoMedusa owner can view photos" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'car-photos' and (select auth.uid()) = '79b47320-3a49-4147-9db7-310b752c0fc5'::uuid);
+
+create policy "AutoMedusa owner can add photos" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'car-photos' and (select auth.uid()) = '79b47320-3a49-4147-9db7-310b752c0fc5'::uuid);
+
+create policy "AutoMedusa owner can update photos" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'car-photos' and (select auth.uid()) = '79b47320-3a49-4147-9db7-310b752c0fc5'::uuid);
+
+create policy "AutoMedusa owner can delete photos" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'car-photos' and (select auth.uid()) = '79b47320-3a49-4147-9db7-310b752c0fc5'::uuid);
+```
+
+Until this is run, a car's details show "Photos aren't set up yet".

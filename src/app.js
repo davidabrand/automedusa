@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import Chart from 'chart.js/auto';
 import CAR_MODELS from './car-models.js';
 
 // No inventory is embedded in this file. It is served publicly, so real customer
@@ -41,7 +40,8 @@ let expenses = [];
 let acquisitions = [];
 let acquisitionsCloudReady = false;
 let profitChart = null;
-let expenseChart = null;
+let ChartLib = null;
+let chartLoading = null;
 let currentUser = null;
 let realtimeChannel = null;
 let realtimeHealthy = false;
@@ -157,7 +157,7 @@ function inferVehicleType(car) {
 function migrateCarSchema(car) {
     return {
         ...car,
-        listedDate: car.listedDate || car.purchaseDate || '',
+        listedDate: car.listedDate || '',
         // A type saved earlier is kept; otherwise it comes from the make and model.
         vehicleType: car.vehicleType && car.vehicleType !== 'Other' ? car.vehicleType : inferVehicleType(car)
     };
@@ -169,7 +169,9 @@ function parseLocalDate(value) {
     return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Days for sale: from the listed date to the sale (or today). Cars still in prep aren't on the market.
 function getDaysOnMarket(car) {
+    if (car.status === 'IN_PREP') return 0;
     const start = parseLocalDate(car.listedDate || car.purchaseDate);
     if (!start) return 0;
     const end = car.status === 'SOLD' && car.saleDate ? parseLocalDate(car.saleDate) : new Date();
@@ -195,7 +197,7 @@ function carFromDb(row) {
         mileage: Number(row.mileage || 0),
         purchasePrice: Number(row.purchase_price || 0),
         purchaseDate: row.purchase_date || '',
-        listedDate: row.listed_date || row.purchase_date || '',
+        listedDate: row.listed_date || '',
         source: row.source || 'Private Seller',
         targetPrice: row.target_price == null ? null : Number(row.target_price),
         status: row.status || 'IN_PREP',
@@ -218,7 +220,7 @@ function carToDb(car) {
         mileage: Number(car.mileage || 0),
         purchase_price: Number(car.purchasePrice || 0),
         purchase_date: car.purchaseDate || null,
-        listed_date: car.listedDate || car.purchaseDate || null,
+        listed_date: car.listedDate || null,
         source: car.source || 'Private Seller',
         target_price: car.targetPrice == null ? null : Number(car.targetPrice),
         status: car.status || 'IN_PREP',
@@ -383,6 +385,7 @@ function refreshSyncStatusFromQueue() {
     if (failed) setSyncStatus('error', `${failed} ${failed === 1 ? 'change' : 'changes'} not saved`);
     else if (ops.length) setSyncStatus('pending', `${ops.length} pending`);
     else setSyncStatus('synced', `Synced at ${new Date().toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' })}`);
+    if (typeof renderUnsynced === 'function') renderUnsynced();
 }
 
 
@@ -879,6 +882,7 @@ function leaveApp() {
 
 async function signOutAutoMedusa() {
     if (!currentUser) return leaveApp();
+    await commitPendingDeletes();
     await flushPendingOps({ retryFailed: true });
     const pending = getPendingOps().length;
     if (pending) {
@@ -959,7 +963,10 @@ async function initApp() {
         await loadCloudData({ silent: true });
     });
     window.addEventListener('offline', () => setSyncStatus('offline'));
+    // If the app is closed during the undo window, the deletion still goes through next time.
+    window.addEventListener('pagehide', queuePendingDeletes);
     document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') queuePendingDeletes();
         const stale = Date.now() - lastCloudLoadAt > 15000;
         if (document.visibilityState === 'visible' && currentUser && navigator.onLine && stale) refreshCloudData();
     });
@@ -970,8 +977,8 @@ async function initApp() {
 // ---------------------------------------------------------------------------
 
 const STATUS = {
-    FOR_SALE: { label: 'For sale', tone: 'blue' },
     IN_PREP: { label: 'In prep', tone: 'orange' },
+    FOR_SALE: { label: 'For sale', tone: 'blue' },
     PENDING: { label: 'Pending', tone: 'gray' },
     SOLD: { label: 'Sold', tone: 'green' }
 };
@@ -1025,10 +1032,15 @@ function joinParts(...parts) {
 }
 
 // One list row. Everything passed in is escaped here.
-function row({ action, id, title, subtitle, value, valueSub, valueTone, subTone, dot, sr, cols = [], chevron = true, strong = false }) {
+function icon(name, cls = '') {
+    return `<svg class="icon${cls ? ` ${cls}` : ''}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+}
+
+// One list row. Everything passed in is escaped here. `swipe` adds a Delete action revealed by swiping left.
+function row({ action, id, title, subtitle, value, valueSub, valueTone, subTone, dot, sr, cols = [], chevron = true, strong = false, swipe = null }) {
     const tag = action ? 'button' : 'div';
     const attrs = action ? ` type="button" data-action="${esc(action)}" data-id="${esc(id)}"` : '';
-    return `<li><${tag} class="row${strong ? ' strong' : ''}"${attrs}>
+    const inner = `<${tag} class="row${strong ? ' strong' : ''}"${attrs}>
         ${dot ? `<span class="dot dot-${dot}" aria-hidden="true"></span>` : ''}
         <span class="row-main">
             <span class="row-title">${esc(title)}</span>
@@ -1040,8 +1052,10 @@ function row({ action, id, title, subtitle, value, valueSub, valueTone, subTone,
             ${value != null ? `<span class="row-value num${valueTone ? ` tone-${valueTone}` : ''}">${esc(value)}</span>` : ''}
             ${valueSub ? `<span class="row-sub num${subTone ? ` tone-${subTone}` : ''}">${esc(valueSub)}</span>` : ''}
         </span>` : ''}
-        ${action && chevron ? '<i class="fa-solid fa-chevron-right row-chevron" aria-hidden="true"></i>' : ''}
-    </${tag}></li>`;
+        ${action && chevron ? icon('chevron-right', 'row-chevron') : ''}
+    </${tag}>`;
+    if (!swipe) return `<li>${inner}</li>`;
+    return `<li class="swipe">${inner}<button type="button" class="swipe-delete" tabindex="-1" data-action="${esc(swipe.action)}" data-id="${esc(swipe.id)}">Delete</button></li>`;
 }
 
 function emptyRow(title, text, actionLabel, action) {
@@ -1065,8 +1079,41 @@ const ui = {
     inventoryStatus: 'ALL',
     expenseType: 'ALL',
     sourcingStage: 'WATCHLIST',
+    period: readPeriod(),
     detail: null // { kind: 'car' | 'expense' | 'acq', id }
 };
+
+function readPeriod() {
+    try { return localStorage.getItem('automedusa_period') || 'all'; } catch { return 'all'; }
+}
+
+const PERIOD_PHRASE = { month: 'this month', last: 'last month', year: 'this year', all: '' };
+
+// [from, to] as YYYY-MM-DD, inclusive; null means all time.
+function periodRange(period) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    if (period === 'month') return [localDateISO(new Date(y, m, 1)), localDateISO(new Date(y, m + 1, 0))];
+    if (period === 'last') return [localDateISO(new Date(y, m - 1, 1)), localDateISO(new Date(y, m, 0))];
+    if (period === 'year') return [`${y}-01-01`, `${y}-12-31`];
+    return null;
+}
+
+function inPeriod(date, period) {
+    const range = periodRange(period);
+    if (!range) return true;
+    const d = String(date || '').slice(0, 10);
+    return !!d && d >= range[0] && d <= range[1];
+}
+
+function setPeriod(period) {
+    ui.period = period;
+    try { localStorage.setItem('automedusa_period', period); } catch { /* storage unavailable */ }
+    ['dashboard-period', 'reports-period'].forEach(id => setSegment($(id), period));
+    renderDashboard();
+    renderReports();
+}
 
 function refreshUI() {
     renderDashboard();
@@ -1080,12 +1127,14 @@ function refreshUI() {
     saveState();
 }
 
-function totals() {
+// Profit for a period counts cars sold in it (with their full cost) and overhead dated in it.
+function totals(period = 'all') {
     const active = cars.filter(c => c.status !== 'SOLD');
-    const sold = cars.filter(c => c.status === 'SOLD');
+    const sold = cars.filter(c => c.status === 'SOLD' && inPeriod(c.saleDate, period));
     const sum = (list, fn) => list.reduce((s, x) => s + (Number(fn(x)) || 0), 0);
-    const overhead = sum(expenses.filter(e => e.type === 'OVERHEAD'), e => e.amount);
-    const recon = sum(expenses.filter(e => e.type === 'VEHICLE'), e => e.amount);
+    const dated = e => inPeriod(e.date, period);
+    const overhead = sum(expenses.filter(e => e.type === 'OVERHEAD' && dated(e)), e => e.amount);
+    const recon = sum(expenses.filter(e => e.type === 'VEHICLE' && dated(e)), e => e.amount);
     const revenue = sum(sold, c => c.salePrice);
     const soldCost = sum(sold, getCarCostBasis);
     const gross = revenue - soldCost;
@@ -1098,20 +1147,22 @@ function totals() {
 }
 
 function renderDashboard() {
-    const t = totals();
+    const t = totals(ui.period);
+    const phrase = PERIOD_PHRASE[ui.period];
 
     const hero = $('kpi-net-profit');
     hero.textContent = formatWhole(t.net);
     hero.classList.toggle('negative', t.sold.length > 0 && t.net < 0);
     hero.classList.toggle('neutral', t.sold.length === 0);
     $('kpi-net-note').textContent = t.sold.length
-        ? `From ${plural(t.sold.length, 'sold car')}, after ${formatWhole(t.overhead)} in overhead.`
-        : cars.length ? 'Record your first sale to see profit here.' : 'Add your first car to get started.';
+        ? `From ${plural(t.sold.length, 'car')} sold${phrase ? ` ${phrase}` : ''}, after ${formatWhole(t.overhead)} in overhead.`
+        : !cars.length ? 'Add your first car to get started.'
+        : phrase ? `No cars sold ${phrase} yet.` : 'Record your first sale to see profit here.';
 
     $('kpi-inv-value').textContent = formatWhole(t.inventoryValue);
     $('kpi-inv-sub').textContent = `${plural(t.active.length, 'car')} in stock`;
     $('kpi-revenue').textContent = formatWhole(t.revenue);
-    $('kpi-revenue-sub').textContent = `${t.sold.length} sold`;
+    $('kpi-revenue-sub').textContent = `${t.sold.length} sold${phrase ? ` ${phrase}` : ''}`;
     $('kpi-expenses').textContent = formatWhole(t.expenses);
     $('kpi-expenses-sub').textContent = `${formatWhole(t.overhead)} overhead`;
 
@@ -1222,7 +1273,8 @@ function renderInventory() {
 
     list.innerHTML = filtered.map(car => {
         const sold = car.status === 'SOLD';
-        const days = getDaysOnMarket(car);
+        const prep = car.status === 'IN_PREP';
+        const days = prep ? daysSince(car.purchaseDate) : getDaysOnMarket(car);
         const profit = sold ? Number(car.salePrice || 0) - getCarCostBasis(car) : null;
         return row({
             action: 'view-car', id: car.id, dot: statusOf(car).tone, sr: statusOf(car).label,
@@ -1231,8 +1283,9 @@ function renderInventory() {
             cols: [car.id, shortDate(car.purchaseDate) || '—', statusOf(car).label],
             value: sold ? formatSigned(profit) : formatWhole(getCarCostBasis(car)),
             valueTone: sold ? (profit >= 0 ? 'green' : 'red') : '',
-            valueSub: sold ? `sold ${shortDate(car.saleDate)}` : `${days} ${days === 1 ? 'day' : 'days'}`,
-            subTone: !sold && days > 30 ? 'red' : ''
+            valueSub: sold ? `sold ${shortDate(car.saleDate)}` : `${plural(days, 'day')}${prep ? ' in prep' : ''}`,
+            subTone: !sold && !prep && days > 30 ? 'red' : '',
+            swipe: { action: 'delete-car', id: car.id }
         });
     }).join('');
 }
@@ -1275,7 +1328,8 @@ function renderExpenses() {
                     title: categoryLabel(exp.category),
                     subtitle: joinParts(car ? vehicleName(car) : 'Overhead', exp.notes),
                     value: formatCurrency(exp.amount),
-                    valueSub: shortDate(exp.date)
+                    valueSub: shortDate(exp.date),
+                    swipe: { action: 'delete-expense', id: exp.id }
                 });
             }).join('')}</ul>`;
     }).join('');
@@ -1302,7 +1356,8 @@ function renderSourcing() {
                 subtitle: joinParts(sourceLabel(acq.source), formatDateTime(acq.auctionAt)),
                 value: formatWhole(acq.currentBid),
                 valueSub: over ? `over ${formatWhole(safe)} limit` : `safe to ${formatWhole(safe)}`,
-                subTone: over ? 'red' : ''
+                subTone: over ? 'red' : '',
+                swipe: { action: 'delete-acq', id: acq.id }
             });
         }).join('') : emptyRow('Nothing on your watchlist', 'Track an auction car or private listing before you spend money.', 'Watch a car', 'new-acq');
     } else if (ui.sourcingStage === 'TRANSIT') {
@@ -1310,7 +1365,8 @@ function renderSourcing() {
             action: 'view-acq', id: acq.id,
             title: vehicleName(acq),
             subtitle: acq.transportEta ? `Arrives ${shortDate(acq.transportEta)}` : 'Arrival date not set',
-            value: formatWhole(acq.purchasePrice || acq.currentBid)
+            value: formatWhole(acq.purchasePrice || acq.currentBid),
+            swipe: { action: 'delete-acq', id: acq.id }
         })).join('') : emptyRow('Nothing in transport', 'Cars you win wait here until they arrive.');
     } else {
         list.innerHTML = prep.length ? prep.map(car => row({
@@ -1323,18 +1379,19 @@ function renderSourcing() {
 }
 
 function renderReports() {
-    const t = totals();
+    const t = totals(ui.period);
+    const phrase = PERIOD_PHRASE[ui.period];
     const purchase = t.sold.reduce((s, c) => s + Number(c.purchasePrice || 0), 0);
     const recon = t.sold.reduce((s, c) => s + getCarRecondCost(c.id), 0);
     const margin = t.revenue - purchase;
     const net = margin - recon - t.overhead;
 
     $('pl-list').innerHTML = [
-        row({ title: 'Sales', value: formatCurrency(t.revenue) }),
+        row({ title: 'Sales', subtitle: plural(t.sold.length, 'car'), value: formatCurrency(t.revenue) }),
         row({ title: 'Purchase cost', value: `−${formatCurrency(purchase)}` }),
         row({ title: 'Gross margin', value: formatCurrency(margin), strong: true }),
-        row({ title: 'Reconditioning', subtitle: 'On sold cars', value: `−${formatCurrency(recon)}` }),
-        row({ title: 'Overhead', value: `−${formatCurrency(t.overhead)}` }),
+        row({ title: 'Reconditioning', subtitle: 'On those cars', value: `−${formatCurrency(recon)}` }),
+        row({ title: 'Overhead', subtitle: phrase ? `Dated ${phrase}` : '', value: `−${formatCurrency(t.overhead)}` }),
         row({ title: 'Net profit', value: formatCurrency(net), valueTone: net < 0 ? 'red' : 'green', strong: true })
     ].join('');
 
@@ -1350,13 +1407,14 @@ function renderReports() {
             value: formatSigned(profit), valueTone: profit >= 0 ? 'green' : 'red',
             valueSub: Number.isFinite(roi) ? `${roi.toFixed(1)}% return` : ''
         });
-    }).join('') : emptyRow('No sales yet', 'Record a sale from a car in Inventory.');
+    }).join('') : emptyRow(phrase ? `No sales ${phrase}` : 'No sales yet', phrase ? 'Try a longer period.' : 'Record a sale from a car in Inventory.');
 }
 
 function populateCarSelectOptions() {
     const select = $('expense-car-id');
     const previous = select.value;
-    const activeCars = cars.filter(c => c.status !== 'SOLD');
+    const unsold = cars.filter(c => c.status !== 'SOLD').sort(byDateDesc(c => c.purchaseDate));
+    const sold = cars.filter(c => c.status === 'SOLD').sort(byDateDesc(c => c.saleDate));
     select.innerHTML = '';
     const add = (value, text) => {
         const opt = document.createElement('option');
@@ -1364,15 +1422,14 @@ function populateCarSelectOptions() {
         opt.textContent = text;
         select.appendChild(opt);
     };
-    add('', activeCars.length ? 'Choose' : 'No unsold cars');
-    activeCars.forEach(car => add(car.id, vehicleName(car)));
-    if (activeCars.some(c => c.id === previous)) select.value = previous;
+    add('', cars.length ? 'Choose' : 'No cars yet');
+    unsold.forEach(car => add(car.id, vehicleName(car)));
+    sold.forEach(car => add(car.id, `${vehicleName(car)} (sold)`));
+    if (cars.some(c => c.id === previous)) select.value = previous;
     syncCombos(select.closest('form') || document);
 }
 
 function renderCharts() {
-    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-    Chart.defaults.color = 'rgba(235, 235, 245, 0.6)';
 
     // Undated expenses can't be placed on a timeline; they're called out underneath.
     const monthly = new Map();
@@ -1403,6 +1460,18 @@ function renderCharts() {
         profitChart = null;
         return;
     }
+    // The chart library loads the first time there's something to draw.
+    if (!ChartLib) {
+        if (!chartLoading) {
+            chartLoading = import('chart.js/auto').then(mod => {
+                ChartLib = mod.default;
+                ChartLib.defaults.font.family = getComputedStyle(document.body).fontFamily;
+                ChartLib.defaults.color = 'rgba(235, 235, 245, 0.6)';
+                renderCharts();
+            }).catch(err => { chartLoading = null; console.warn('Chart failed to load:', err); });
+        }
+        return;
+    }
     if (profitChart) {
         profitChart.data.labels = labels;
         profitChart.data.datasets[0].data = sales;
@@ -1410,7 +1479,7 @@ function renderCharts() {
         profitChart.update();
         return;
     }
-    profitChart = new Chart(canvas.getContext('2d'), {
+    profitChart = new ChartLib(canvas.getContext('2d'), {
         type: 'bar',
         data: {
             labels,
@@ -1486,22 +1555,32 @@ function actionButtons(buttons) {
     ).join('')}</div>`;
 }
 
+function statusSelect(car) {
+    const options = Object.entries(STATUS).map(([value, s]) =>
+        `<option value="${value}"${car.status === value ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+    return `<label class="field"><span>Status</span><select class="field-select-tint" data-status-car="${esc(car.id)}">${options}</select></label>`;
+}
+
 function carDetail(car) {
     const id = car.id;
     const cost = getCarCostBasis(car);
     const recon = getCarRecondCost(id);
     const sold = car.status === 'SOLD';
+    const prep = car.status === 'IN_PREP';
     const profit = sold ? Number(car.salePrice || 0) - cost : null;
     const carExpenses = expenses.filter(e => e.carId === id).sort(byDateDesc(e => e.date));
 
     const hero = sold
         ? heroBlock(formatSigned(profit), `Profit on a ${formatWhole(car.salePrice)} sale`, profit >= 0 ? 'green' : 'red')
-        : heroBlock(formatCurrency(cost), `Total cost, ${plural(getDaysOnMarket(car), 'day')} on market`);
+        : prep
+            ? heroBlock(formatCurrency(cost), `Total cost, in prep for ${plural(daysSince(car.purchaseDate), 'day')}`)
+            : heroBlock(formatCurrency(cost), `Total cost, ${plural(getDaysOnMarket(car), 'day')} on market`);
 
     const actions = actionButtons([
-        car.status === 'IN_PREP' && { label: 'Ready for sale', action: 'ready-car', id, primary: true },
+        prep && { label: 'Ready for sale', action: 'ready-car', id, primary: true },
         (car.status === 'FOR_SALE' || car.status === 'PENDING') && { label: 'Record sale', action: 'sell-car', id, primary: true },
-        !sold && { label: 'Add expense', action: 'new-expense-for', id }
+        { label: 'Add expense', action: 'new-expense-for', id },
+        { label: 'Edit', action: 'edit-car', id }
     ]);
 
     const money = `<div class="group">
@@ -1512,32 +1591,33 @@ function carDetail(car) {
         ${sold && car.buyer ? field('Buyer', car.buyer) : ''}
     </div>`;
 
-    const reconList = carExpenses.length ? `<h3 class="detail-section-title">Reconditioning</h3>
+    const reconList = carExpenses.length ? `<h3 class="detail-section-title">Expenses</h3>
         <ul class="list" style="margin-bottom:24px">${carExpenses.map(e => row({
             action: 'view-expense', id: e.id, title: categoryLabel(e.category),
             subtitle: joinParts(shortDate(e.date), e.notes), value: formatCurrency(e.amount)
         })).join('')}</ul>` : '';
 
     const details = `<div class="group">
-        ${field('Status', statusOf(car).label)}
+        ${statusSelect(car)}
         ${field('Stock number', id)}
         ${field('VIN', car.vin || 'Not entered', { mono: !!car.vin })}
         ${field('Type', car.vehicleType || 'Other')}
         ${field('Mileage', `${Number(car.mileage || 0).toLocaleString(LOCALE)} km`)}
         ${field('From', sourceLabel(car.source) || '—')}
         ${field('Bought', formatDisplayDate(car.purchaseDate) || '—')}
-        ${field('Listed', formatDisplayDate(car.listedDate || car.purchaseDate) || '—')}
+        ${field('Listed', formatDisplayDate(car.listedDate) || 'Not listed yet')}
         ${sold ? field('Sold', formatDisplayDate(car.saleDate) || '—') : ''}
     </div>
     ${car.notes ? `<h3 class="detail-section-title">Notes</h3><div class="group"><div class="field"><span class="row-sub detail-note" style="color:var(--label);padding:11px 0">${esc(car.notes)}</span></div></div>` : ''}`;
 
     const remove = `<div class="group"><button type="button" class="field field-action destructive" data-action="delete-car" data-id="${esc(id)}">Delete car</button></div>`;
-    return { title: vehicleName(car), html: hero + actions + money + reconList + details + remove };
+    return { title: vehicleName(car), html: hero + actions + photoStrip(id) + money + reconList + details + remove };
 }
 
 function expenseDetail(exp) {
     const car = cars.find(c => c.id === exp.carId);
     const html = heroBlock(formatCurrency(exp.amount), categoryLabel(exp.category))
+        + actionButtons([{ label: 'Edit', action: 'edit-expense', id: exp.id }])
         + `<div class="group">
             ${car
                 ? `<button type="button" class="field field-action" data-action="view-car" data-id="${esc(car.id)}"><span style="color:var(--label)">For</span><span class="field-value" style="color:var(--tint)">${esc(vehicleName(car))}</span></button>`
@@ -1579,7 +1659,7 @@ function acqDetail(acq) {
         ${acq.auctionAt ? field('Auction', formatDateTime(acq.auctionAt)) : ''}
         ${acq.vin ? field('VIN', acq.vin, { mono: true }) : ''}
         ${acq.mileage ? field('Mileage', `${Number(acq.mileage).toLocaleString(LOCALE)} km`) : ''}
-        ${href ? `<a class="field field-action" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open listing<i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" style="margin-left:auto;font-size:13px"></i></a>` : ''}
+        ${href ? `<a class="field field-action" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open listing${icon('external', 'icon-trail')}</a>` : ''}
     </div>
     ${acq.notes ? `<h3 class="detail-section-title">Notes</h3><div class="group"><div class="field"><span class="row-sub detail-note" style="color:var(--label);padding:11px 0">${esc(acq.notes)}</span></div></div>` : ''}`;
 
@@ -1592,53 +1672,137 @@ function acqDetail(acq) {
 // ---------------------------------------------------------------------------
 
 // Shows the type worked out from the make and model, so there's nothing to pick by hand.
-function updateTypeHint(makeId, modelId, hintId) {
-    const make = $(makeId).value.trim();
-    const model = $(modelId).value.trim();
+// What the VIN lookup said, per form ('car' or 'acq').
+const vinNote = { car: '', acq: '' };
+const vinLastLookup = { car: '', acq: '' };
+
+// Shows the type worked out from the make and model, plus any VIN lookup result.
+function updateTypeHint(prefix) {
+    const make = $(`${prefix}-make`).value.trim();
+    const model = $(`${prefix}-model`).value.trim();
     const type = make && model ? inferVehicleType({ make, model }) : '';
-    $(hintId).textContent = !type ? '' : type === 'Other'
+    const typeText = !type ? '' : type === 'Other'
         ? 'Type not recognized. It will be listed as Other.'
         : type === 'SUV' ? 'Detected as an SUV.' : `Detected as ${/^[AEIOU]/.test(type) ? 'an' : 'a'} ${type.toLowerCase()}.`;
+    $(`${prefix}-type-hint`).textContent = [vinNote[prefix], typeText].filter(Boolean).join(' ');
 }
 
-function openNewCar() {
+function matchMake(raw) {
+    const name = String(raw || '').trim();
+    if (!name) return '';
+    const known = COMMON_MAKES.find(m => m.toLowerCase() === name.toLowerCase());
+    return known || name.toLowerCase().replace(/(^|[\s-])\w/g, c => c.toUpperCase());
+}
+
+// 6. Look the VIN up in NHTSA's free decoder and fill in year, make and model if they're empty.
+async function lookupVin(prefix) {
+    const input = $(`${prefix}-vin`);
+    const vin = input.value.trim().toUpperCase();
+    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
+        if (vinNote[prefix]) { vinNote[prefix] = ''; updateTypeHint(prefix); }
+        vinLastLookup[prefix] = '';
+        return;
+    }
+    if (vin === vinLastLookup[prefix]) return;
+    vinLastLookup[prefix] = vin;
+    vinNote[prefix] = 'Looking up the VIN…';
+    updateTypeHint(prefix);
+    try {
+        const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`);
+        const result = (await response.json())?.Results?.[0] || {};
+        if (input.value.trim().toUpperCase() !== vin) return;
+        const year = String(result.ModelYear || '').trim();
+        const make = matchMake(result.Make);
+        const model = String(result.Model || '').trim();
+        if (!make && !model) {
+            vinNote[prefix] = "Couldn't find this VIN. Fill in the details below.";
+        } else {
+            const fill = (id, value) => {
+                const el = $(`${prefix}-${id}`);
+                if (value && !el.value.trim()) {
+                    el.value = value;
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            };
+            fill('year', year);
+            fill('make', make);
+            fill('model', model);
+            vinNote[prefix] = `Filled in from the VIN: ${[year, make, model].filter(Boolean).join(' ')}.`;
+        }
+    } catch {
+        vinNote[prefix] = "Couldn't look up the VIN right now. Fill in the details below.";
+    }
+    updateTypeHint(prefix);
+}
+
+function openCarForm(id = '') {
+    const car = id ? cars.find(c => c.id === id) : null;
     $('form-add-car').reset();
-    const today = localDateISO();
-    $('car-purchase-date').value = today;
-    $('car-listed-date').value = today;
-    $('car-source').value = 'Private Seller';
-    updateTypeHint('car-make', 'car-model', 'car-type-hint');
+    vinNote.car = '';
+    vinLastLookup.car = car?.vin || '';
+    $('car-id').value = car?.id || '';
+    $('sheet-add-car-title').textContent = car ? 'Edit car' : 'Add car';
+    $('car-submit').textContent = car ? 'Save' : 'Add';
+    if (car) {
+        const set = (fieldId, value) => { $(fieldId).value = value ?? ''; };
+        set('car-vin', car.vin);
+        set('car-year', car.year || '');
+        set('car-make', car.make);
+        set('car-model', car.model);
+        set('car-mileage', car.mileage ?? '');
+        set('car-purchase-price', car.purchasePrice ?? '');
+        set('car-purchase-date', car.purchaseDate);
+        set('car-source', car.source || 'Private Seller');
+        set('car-target-price', car.targetPrice ?? '');
+        set('car-listed-date', car.status === 'IN_PREP' ? '' : car.listedDate);
+        set('car-notes', car.notes);
+    } else {
+        $('car-purchase-date').value = localDateISO();
+        $('car-source').value = 'Private Seller';
+    }
+    updateTypeHint('car');
     openSheet('sheet-add-car');
 }
 
-async function handleAddCar(event) {
+async function handleSaveCar(event) {
     event.preventDefault();
     if (!$('form-add-car').reportValidity()) return;
 
+    const existing = cars.find(c => c.id === $('car-id').value) || null;
+    const make = $('car-make').value.trim();
+    const model = $('car-model').value.trim();
+    const listed = $('car-listed-date').value;
     const targetRaw = $('car-target-price').value;
-    const purchaseDate = $('car-purchase-date').value;
-    const newCar = {
-        id: generateStockId(),
+
+    // Listed date decides In prep vs For sale; a sold car stays sold.
+    let status = existing?.status || 'IN_PREP';
+    if (status !== 'SOLD') status = listed ? (status === 'PENDING' ? 'PENDING' : 'FOR_SALE') : 'IN_PREP';
+    const sameModel = existing && existing.make === make && existing.model === model;
+
+    const car = {
+        salePrice: null, saleDate: null, buyer: null,
+        ...(existing || {}),
+        id: existing?.id || generateStockId(),
         year: Number($('car-year').value),
-        make: $('car-make').value.trim(),
-        model: $('car-model').value.trim(),
+        make,
+        model,
         vin: $('car-vin').value.trim().toUpperCase(),
         mileage: Number($('car-mileage').value),
         purchasePrice: Number($('car-purchase-price').value),
-        purchaseDate,
-        listedDate: $('car-listed-date').value || purchaseDate,
-        vehicleType: inferVehicleType({ make: $('car-make').value, model: $('car-model').value }),
+        purchaseDate: $('car-purchase-date').value,
+        listedDate: listed,
+        vehicleType: sameModel && existing.vehicleType ? existing.vehicleType : inferVehicleType({ make, model }),
         source: $('car-source').value,
         targetPrice: targetRaw === '' ? null : Number(targetRaw),
-        status: 'IN_PREP',
-        notes: $('car-notes').value.trim(),
-        salePrice: null, saleDate: null, buyer: null
+        status,
+        notes: $('car-notes').value.trim()
     };
 
-    cars.push(newCar);
+    if (existing) cars[cars.indexOf(existing)] = car;
+    else cars.push(car);
     refreshUI();
     closeSheet();
-    await runOrQueueCloudOp({ kind: 'upsert_car', payload: carToDb(newCar) }, `Added ${vehicleName(newCar)}`);
+    await runOrQueueCloudOp({ kind: 'upsert_car', payload: carToDb(car) }, existing ? 'Changes saved' : `Added ${vehicleName(car)}`);
 }
 
 function setExpenseType(type) {
@@ -1647,16 +1811,38 @@ function setExpenseType(type) {
     $('expense-vehicle-row').hidden = type === 'OVERHEAD';
 }
 
-function openNewExpense(carId = '') {
+function ensureOption(select, value, label = value) {
+    if (value && ![...select.options].some(o => o.value === value)) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        select.appendChild(opt);
+    }
+}
+
+function openExpenseForm({ id = '', carId = '' } = {}) {
+    const exp = id ? expenses.find(e => e.id === id) : null;
     $('form-add-expense').reset();
     populateCarSelectOptions();
-    setExpenseType('VEHICLE');
-    $('expense-date').value = localDateISO();
-    if (carId) $('expense-car-id').value = carId;
+    $('expense-id').value = exp?.id || '';
+    $('sheet-add-expense-title').textContent = exp ? 'Edit expense' : 'Add expense';
+    $('expense-submit').textContent = exp ? 'Save' : 'Add';
+    setExpenseType(exp?.type || 'VEHICLE');
+    if (exp) {
+        ensureOption($('expense-category'), exp.category, categoryLabel(exp.category));
+        $('expense-car-id').value = exp.carId || '';
+        $('expense-category').value = exp.category;
+        $('expense-amount').value = exp.amount;
+        $('expense-date').value = exp.date || '';
+        $('expense-notes').value = exp.notes || '';
+    } else {
+        $('expense-date').value = localDateISO();
+        if (carId) $('expense-car-id').value = carId;
+    }
     openSheet('sheet-add-expense');
 }
 
-async function handleAddExpense(event) {
+async function handleSaveExpense(event) {
     event.preventDefault();
     const form = $('form-add-expense');
     const type = $('expense-type').value;
@@ -1669,9 +1855,10 @@ async function handleAddExpense(event) {
     }
     if (!form.reportValidity()) return;
 
+    const existing = expenses.find(e => e.id === $('expense-id').value) || null;
     const amount = Number($('expense-amount').value);
-    const newExpense = {
-        id: `EXP-${Date.now()}-${randomToken(5)}`,
+    const expense = {
+        id: existing?.id || `EXP-${Date.now()}-${randomToken(5)}`,
         type,
         carId,
         category: $('expense-category').value,
@@ -1680,10 +1867,11 @@ async function handleAddExpense(event) {
         notes: $('expense-notes').value.trim()
     };
 
-    expenses.push(newExpense);
+    if (existing) expenses[expenses.indexOf(existing)] = expense;
+    else expenses.push(expense);
     refreshUI();
     closeSheet();
-    await runOrQueueCloudOp({ kind: 'upsert_expense', payload: expenseToDb(newExpense) }, `${formatCurrency(amount)} expense added`);
+    await runOrQueueCloudOp({ kind: 'upsert_expense', payload: expenseToDb(expense) }, existing ? 'Changes saved' : `${formatCurrency(amount)} expense added`);
 }
 
 function openRecordSale(carId) {
@@ -1767,37 +1955,87 @@ function confirmAction({ title = 'Delete?', message = '', confirmLabel = 'Delete
     });
 }
 
-async function deleteCar(carId) {
-    const car = cars.find(c => c.id === carId);
-    if (!car) return;
-    const related = expenses.filter(e => e.carId === carId).map(e => e.id);
-    const ok = await confirmAction({
-        title: `Delete ${vehicleName(car)}?`,
-        message: related.length
-            ? `Its ${plural(related.length, 'expense')} will be deleted too. This can't be undone.`
-            : "This can't be undone."
-    });
-    if (!ok) return;
+const pendingDeletes = new Map(); // key -> { timer, ops }
 
-    cars = cars.filter(c => c.id !== carId);
-    expenses = expenses.filter(e => e.carId !== carId);
+// Removes records from the screen now and sends the deletion after a few seconds,
+// unless Undo is tapped. `ops` are the cloud operations to run when it's final.
+function deleteWithUndo({ key, message, remove, restore, ops, after = null }) {
+    remove();
     refreshUI();
-    for (const expId of related) await runOrQueueCloudOp({ kind: 'delete_expense', id: expId });
-    await runOrQueueCloudOp({ kind: 'delete_car', id: carId }, 'Car deleted');
+    const timer = setTimeout(() => finalizeDelete(key), 5000);
+    pendingDeletes.set(key, { timer, ops, after });
+    showToast(message, 'success', {
+        duration: 5000,
+        action: {
+            label: 'Undo',
+            run: () => {
+                const pending = pendingDeletes.get(key);
+                if (!pending) return;
+                clearTimeout(pending.timer);
+                pendingDeletes.delete(key);
+                restore();
+                refreshUI();
+            }
+        }
+    });
 }
 
-async function deleteExpense(expId) {
+async function finalizeDelete(key) {
+    const pending = pendingDeletes.get(key);
+    if (!pending) return;
+    pendingDeletes.delete(key);
+    for (const op of pending.ops) await runOrQueueCloudOp(op);
+    if (pending.after) pending.after();
+}
+
+async function commitPendingDeletes() {
+    for (const [key, pending] of [...pendingDeletes]) {
+        clearTimeout(pending.timer);
+        await finalizeDelete(key);
+    }
+}
+
+// When the app is hidden or closed, park pending deletions in the sync queue so they still happen.
+function queuePendingDeletes() {
+    for (const [key, pending] of [...pendingDeletes]) {
+        clearTimeout(pending.timer);
+        pendingDeletes.delete(key);
+        pending.ops.forEach(op => queueCloudOp(op));
+    }
+}
+
+function deleteCar(carId) {
+    const car = cars.find(c => c.id === carId);
+    if (!car) return;
+    const carIndex = cars.indexOf(car);
+    const related = expenses.filter(e => e.carId === carId);
+    deleteWithUndo({
+        key: `car:${carId}`,
+        message: `${vehicleName(car)} deleted`,
+        remove: () => {
+            cars = cars.filter(c => c.id !== carId);
+            expenses = expenses.filter(e => e.carId !== carId);
+        },
+        restore: () => {
+            cars.splice(Math.min(carIndex, cars.length), 0, car);
+            expenses.push(...related);
+        },
+        ops: [...related.map(e => ({ kind: 'delete_expense', id: e.id })), { kind: 'delete_car', id: carId }],
+        after: () => deleteAllPhotos(carId)
+    });
+}
+
+function deleteExpense(expId) {
     const exp = expenses.find(e => e.id === expId);
     if (!exp) return;
-    const ok = await confirmAction({
-        title: 'Delete this expense?',
-        message: `${categoryLabel(exp.category)}, ${formatCurrency(exp.amount)}. This can't be undone.`
+    const index = expenses.indexOf(exp);
+    deleteWithUndo({
+        key: `expense:${expId}`,
+        message: 'Expense deleted',
+        remove: () => { expenses = expenses.filter(e => e.id !== expId); },
+        restore: () => { expenses.splice(Math.min(index, expenses.length), 0, exp); },
+        ops: [{ kind: 'delete_expense', id: expId }]
     });
-    if (!ok) return;
-
-    expenses = expenses.filter(e => e.id !== expId);
-    refreshUI();
-    await runOrQueueCloudOp({ kind: 'delete_expense', id: expId }, 'Expense deleted');
 }
 
 function acquisitionFormNumber(id) {
@@ -1856,7 +2094,9 @@ function openAcquisitionForm(id = '') {
         set('acq-notes', acq.notes);
     }
     updateAcquisitionCalculator();
-    updateTypeHint('acq-make', 'acq-model', 'acq-type-hint');
+    vinNote.acq = '';
+    vinLastLookup.acq = acq?.vin || '';
+    updateTypeHint('acq');
     openSheet('sheet-acquisition');
 }
 
@@ -1940,17 +2180,28 @@ async function handleMarkAcquisitionWon(event) {
     await runOrQueueCloudOp({ kind: 'upsert_acquisition', payload: acquisitionToDb(acq) }, 'Moved to In transport');
 }
 
-async function markAcquisitionArrived(id) {
+function openArrived(id) {
     const acq = acquisitions.find(a => a.id === id);
     if (!acq) return;
-    const ok = await confirmAction({
-        title: 'Mark as arrived?',
-        message: `${vehicleName(acq)} will be added to your inventory as In prep.`,
-        confirmLabel: 'Add to inventory',
-        destructive: false
-    });
-    if (!ok) return;
+    $('form-arrived').reset();
+    $('arr-acq-id').value = id;
+    $('arr-vehicle').textContent = `${vehicleName(acq)} will be added to your inventory as In prep.`;
+    $('arr-price').value = Number(acq.purchasePrice || acq.currentBid || 0) || '';
+    $('arr-date').value = localDateISO();
+    $('arr-fees').value = Number(acq.estimatedFees || 0) || '';
+    $('arr-transport').value = Number(acq.estimatedTransport || 0) || '';
+    openSheet('sheet-arrived');
+}
 
+async function handleArrived(event) {
+    event.preventDefault();
+    if (!$('form-arrived').reportValidity()) return;
+    const id = $('arr-acq-id').value;
+    const acq = acquisitions.find(a => a.id === id);
+    if (!acq) return;
+
+    const arrived = $('arr-date').value;
+    const bought = acq.purchaseDate || arrived;
     const car = migrateCarSchema({
         id: generateStockId(),
         year: acq.year,
@@ -1959,8 +2210,8 @@ async function markAcquisitionArrived(id) {
         vehicleType: acq.vehicleType || inferVehicleType(acq),
         vin: acq.vin || '',
         mileage: Number(acq.mileage || 0),
-        purchasePrice: Number(acq.purchasePrice || acq.currentBid || 0),
-        purchaseDate: acq.purchaseDate || localDateISO(),
+        purchasePrice: Number($('arr-price').value || 0),
+        purchaseDate: bought,
         listedDate: '',
         source: acq.source || 'Other',
         targetPrice: Number(acq.expectedSalePrice || 0) || null,
@@ -1971,37 +2222,65 @@ async function markAcquisitionArrived(id) {
         buyer: null
     });
 
+    const newExpenses = [];
+    const addCost = (amount, category, date, notes) => {
+        if (amount > 0) newExpenses.push({ id: `EXP-${Date.now()}-${randomToken(5)}`, type: 'VEHICLE', carId: car.id, category, amount, date, notes });
+    };
+    addCost(Number($('arr-fees').value || 0), 'Auction Fees', bought, sourceLabel(acq.source));
+    addCost(Number($('arr-transport').value || 0), 'License & Transport', arrived, 'Transport');
+
     cars.unshift(car);
+    expenses.push(...newExpenses);
     acquisitions = acquisitions.filter(a => a.id !== id);
     refreshUI();
     closeSheet();
     setSourcingStage('PREP');
     await runOrQueueCloudOp({ kind: 'upsert_car', payload: carToDb(car) });
+    for (const exp of newExpenses) await runOrQueueCloudOp({ kind: 'upsert_expense', payload: expenseToDb(exp) });
     await runOrQueueCloudOp({ kind: 'delete_acquisition', id }, 'Added to inventory');
 }
 
 async function markCarReadyForSale(carId) {
-    const car = cars.find(c => c.id === carId);
-    if (!car) return;
-    car.status = 'FOR_SALE';
-    if (!car.listedDate) car.listedDate = localDateISO();
-    refreshUI();
-    await runOrQueueCloudOp({ kind: 'upsert_car', payload: carToDb(car) }, 'Marked for sale');
+    await changeCarStatus(carId, 'FOR_SALE');
 }
 
-async function deleteAcquisition(id) {
+async function changeCarStatus(carId, status) {
+    const car = cars.find(c => c.id === carId);
+    if (!car || car.status === status) return;
+    if (status === 'SOLD') {
+        refreshDetail();
+        openRecordSale(carId);
+        return;
+    }
+    if (car.status === 'SOLD') {
+        const ok = await confirmAction({
+            title: 'Undo this sale?',
+            message: `The sale price, date and buyer for ${vehicleName(car)} will be cleared.`,
+            confirmLabel: 'Undo sale'
+        });
+        if (!ok) { refreshDetail(); return; }
+        car.salePrice = null;
+        car.saleDate = null;
+        car.buyer = null;
+    }
+    if (status === 'IN_PREP') car.listedDate = '';
+    else if (!car.listedDate || car.status === 'IN_PREP') car.listedDate = localDateISO();
+    car.status = status;
+    refreshUI();
+    await runOrQueueCloudOp({ kind: 'upsert_car', payload: carToDb(car) }, `Marked ${STATUS[status].label.toLowerCase()}`);
+}
+
+function deleteAcquisition(id) {
     const acq = acquisitions.find(a => a.id === id);
     if (!acq) return;
-    const ok = await confirmAction({
-        title: `Remove ${vehicleName(acq)}?`,
-        message: "It will be removed from sourcing. This can't be undone.",
-        confirmLabel: 'Remove'
+    const index = acquisitions.indexOf(acq);
+    deleteWithUndo({
+        key: `acquisition:${id}`,
+        message: `${vehicleName(acq)} removed`,
+        remove: () => { acquisitions = acquisitions.filter(a => a.id !== id); },
+        restore: () => { acquisitions.splice(Math.min(index, acquisitions.length), 0, acq); },
+        ops: [{ kind: 'delete_acquisition', id }]
     });
-    if (!ok) return;
-
-    acquisitions = acquisitions.filter(a => a.id !== id);
-    refreshUI();
-    await runOrQueueCloudOp({ kind: 'delete_acquisition', id }, 'Removed');
 }
 
 // Quotes every field and neutralises values a spreadsheet would run as a formula.
@@ -2125,6 +2404,7 @@ function openSheet(id) {
         sheetReturnFocus = document.activeElement;
     }
     openSheetId = id;
+    if (id === 'sheet-account') renderUnsynced();
     sheet.querySelector('.sheet-body').scrollTop = 0;
     sheet.style.transform = '';
     // Force a style flush so the slide-up always animates from the closed position.
@@ -2217,15 +2497,30 @@ function closeAddMenu() {
 
 let toastTimer = null;
 
-function showToast(message, type = 'success') {
+function showToast(message, type = 'success', { action = null, duration = null } = {}) {
     const toast = $('toast');
-    toast.textContent = message;
+    toast.innerHTML = '';
+    const text = document.createElement('span');
+    text.textContent = message;
+    toast.appendChild(text);
+    if (action) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'toast-action';
+        button.textContent = action.label;
+        button.addEventListener('click', () => {
+            toast.classList.remove('show');
+            action.run();
+        });
+        toast.appendChild(button);
+    }
     toast.classList.toggle('error', type === 'error');
+    toast.classList.toggle('has-action', !!action);
     toast.classList.remove('show');
     void toast.offsetHeight;
     toast.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove('show'), type === 'error' ? 5000 : 2400);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), duration || (type === 'error' ? 5000 : 2400));
 }
 
 // ---------------------------------------------------------------------------
@@ -2310,7 +2605,7 @@ function createCombo({ kind, select = null, input = null, getOptions, anchor, po
         if (state.active >= state.items.length) state.active = state.items.length - 1;
         list.innerHTML = state.items.length
             ? state.items.map((o, i) => `<div class="combo-option${i === state.active ? ' active' : ''}" role="option" id="${listId}-${i}" data-index="${i}" aria-selected="${o.value === selectedValue}">
-                <span>${esc(o.label)}</span>${o.value === selectedValue ? '<i class="fa-solid fa-check" aria-hidden="true"></i>' : ''}</div>`).join('')
+                <span>${esc(o.label)}</span>${o.value === selectedValue ? icon('check') : ''}</div>`).join('')
             : (kind === 'select' ? '<div class="combo-empty">No matches</div>' : '');
         const show = state.items.length > 0 || kind === 'select';
         state.open = show;
@@ -2445,6 +2740,326 @@ function initCombos() {
     });
 }
 
+
+// ---------------------------------------------------------------------------
+// 8. Changes that haven't reached the cloud
+// ---------------------------------------------------------------------------
+
+const OP_LABELS = {
+    upsert_car: 'Car saved', delete_car: 'Car deleted',
+    upsert_expense: 'Expense saved', delete_expense: 'Expense deleted',
+    upsert_acquisition: 'Watched car saved', delete_acquisition: 'Watched car removed'
+};
+
+function describeOp(op) {
+    const id = op.payload?.id || op.id;
+    const car = op.kind.endsWith('_car') ? (cars.find(c => c.id === id) || (op.payload && carFromDb(op.payload))) : null;
+    const acq = op.kind.endsWith('_acquisition') ? (acquisitions.find(a => a.id === id) || (op.payload && acquisitionFromDb(op.payload))) : null;
+    const exp = op.kind.endsWith('_expense') ? (expenses.find(e => e.id === id) || (op.payload && expenseFromDb(op.payload))) : null;
+    const name = car ? vehicleName(car) : acq ? vehicleName(acq) : exp ? `${categoryLabel(exp.category)}, ${formatCurrency(exp.amount)}` : id;
+    return { title: OP_LABELS[op.kind] || op.kind, name };
+}
+
+function renderUnsynced() {
+    const block = $('unsynced-block');
+    if (!block) return;
+    const ops = getPendingOps();
+    block.hidden = ops.length === 0;
+    $('unsynced-list').innerHTML = ops.map(op => {
+        const { title, name } = describeOp(op);
+        const failed = (op.attempts || 0) >= MAX_SYNC_ATTEMPTS;
+        return `<li><div class="row">
+            <span class="row-main">
+                <span class="row-title">${esc(title)}</span>
+                <span class="row-sub">${esc(name)}</span>
+                ${op.lastError ? `<span class="row-sub ${failed ? 'tone-red' : ''}" style="white-space:normal">${esc(op.lastError.split(' • ')[0])}</span>` : ''}
+            </span>
+            <button type="button" class="link-btn destructive" style="font-size:15px" data-action="discard-op" data-id="${esc(cloudOpIdentity(op))}">Discard</button>
+        </div></li>`;
+    }).join('') + (ops.length ? `<li><button type="button" class="row compact field-action" data-action="retry-sync" style="justify-content:center">Try again now</button></li>` : '');
+}
+
+async function discardPendingOp(identity) {
+    const ok = await confirmAction({
+        title: 'Discard this change?',
+        message: "It will be removed from this device and won't be sent to the cloud.",
+        confirmLabel: 'Discard'
+    });
+    if (!ok) return;
+    setPendingOps(getPendingOps().filter(op => cloudOpIdentity(op) !== identity));
+    refreshSyncStatusFromQueue();
+    if (navigator.onLine) await loadCloudData({ silent: true });
+    showToast('Change discarded');
+}
+
+// ---------------------------------------------------------------------------
+// 9. Swipe a row left to reveal Delete (touch screens)
+// ---------------------------------------------------------------------------
+
+const swipeState = { open: null, suppressClick: false };
+const SWIPE_WIDTH = 88;
+
+function closeSwipe() {
+    if (!swipeState.open) return;
+    swipeState.open.classList.remove('open');
+    swipeState.open.querySelector('.row').style.transform = '';
+    swipeState.open = null;
+}
+
+function enableSwipeRows() {
+    let li = null, rowEl = null, startX = 0, startY = 0, dx = 0, decided = false, horizontal = false, base = 0;
+
+    document.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'mouse') return;
+        const target = event.target.closest('.swipe > .row');
+        if (!target) return;
+        li = target.parentElement;
+        rowEl = target;
+        startX = event.clientX;
+        startY = event.clientY;
+        dx = 0;
+        decided = false;
+        horizontal = false;
+        base = li.classList.contains('open') ? -SWIPE_WIDTH : 0;
+        if (swipeState.open && swipeState.open !== li) closeSwipe();
+    }, { passive: true });
+
+    document.addEventListener('pointermove', event => {
+        if (!li) return;
+        const mx = event.clientX - startX;
+        const my = event.clientY - startY;
+        if (!decided && (Math.abs(mx) > 8 || Math.abs(my) > 8)) {
+            decided = true;
+            horizontal = Math.abs(mx) > Math.abs(my);
+            if (horizontal) rowEl.classList.add('dragging');
+        }
+        if (!horizontal) return;
+        dx = Math.min(0, Math.max(-SWIPE_WIDTH * 1.4, base + mx));
+        rowEl.style.transform = `translateX(${dx}px)`;
+    }, { passive: true });
+
+    const end = () => {
+        if (!li) return;
+        if (horizontal) {
+            rowEl.classList.remove('dragging');
+            swipeState.suppressClick = true;
+            setTimeout(() => { swipeState.suppressClick = false; }, 350);
+            if (dx < -SWIPE_WIDTH / 2) {
+                li.classList.add('open');
+                rowEl.style.transform = `translateX(${-SWIPE_WIDTH}px)`;
+                swipeState.open = li;
+            } else {
+                li.classList.remove('open');
+                rowEl.style.transform = '';
+                if (swipeState.open === li) swipeState.open = null;
+            }
+        }
+        li = null;
+        rowEl = null;
+    };
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+}
+
+// ---------------------------------------------------------------------------
+// 10. Pull down at the top of a page to sync
+// ---------------------------------------------------------------------------
+
+function enablePullToRefresh() {
+    const ptr = $('ptr');
+    let startY = null;
+    let pull = 0;
+
+    window.addEventListener('touchstart', event => {
+        startY = null;
+        if (openSheetId || !currentUser || window.scrollY > 0 || event.touches.length !== 1) return;
+        if (event.target.closest?.('.sheet, .menu, .combo-list, .photo-viewer, input, select, textarea, canvas')) return;
+        startY = event.touches[0].clientY;
+        pull = 0;
+    }, { passive: true });
+
+    window.addEventListener('touchmove', event => {
+        if (startY == null) return;
+        const distance = event.touches[0].clientY - startY;
+        if (distance <= 0 || window.scrollY > 0) { pull = 0; ptr.style.transform = ''; ptr.style.opacity = ''; return; }
+        pull = Math.min(distance * 0.5, 90);
+        ptr.style.transition = 'none';
+        ptr.style.transform = `translate(-50%, ${pull}px) rotate(${pull * 4}deg)`;
+        ptr.style.opacity = String(Math.min(1, pull / 60));
+        ptr.classList.toggle('ready', pull >= 64);
+    }, { passive: true });
+
+    window.addEventListener('touchend', async () => {
+        if (startY == null) return;
+        startY = null;
+        ptr.style.transition = '';
+        if (pull >= 64) {
+            ptr.classList.add('loading');
+            ptr.style.transform = 'translate(-50%, 64px)';
+            ptr.style.opacity = '1';
+            // Never leave the spinner up on a stalled connection.
+            await Promise.race([refreshCloudData({ retryFailed: true }), new Promise(resolve => setTimeout(resolve, 12000))]);
+            if (currentUser && navigator.onLine) showToast('Up to date');
+        }
+        ptr.classList.remove('loading', 'ready');
+        ptr.style.transform = '';
+        ptr.style.opacity = '';
+        pull = 0;
+    });
+}
+
+// ---------------------------------------------------------------------------
+// 12. Keep sheets and the sign-in form above the iPhone keyboard
+// ---------------------------------------------------------------------------
+
+function trackVisualViewport() {
+    const vv = window.visualViewport;
+    const root = document.documentElement;
+    if (vv) {
+        const update = () => {
+            const keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+            root.style.setProperty('--kb', `${Math.round(keyboard)}px`);
+            root.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+        };
+        vv.addEventListener('resize', update);
+        vv.addEventListener('scroll', update);
+        update();
+    }
+    // Bring the field being typed in into view once the keyboard has opened.
+    document.addEventListener('focusin', event => {
+        const field = event.target.closest('.sheet-body input, .sheet-body textarea, .sheet-body select, .automedusa-login-input');
+        if (!field || !window.matchMedia('(pointer: coarse)').matches) return;
+        setTimeout(() => field.scrollIntoView({ block: 'center', behavior: 'smooth' }), 320);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// 11. Photos (Supabase Storage, private bucket "car-photos")
+// ---------------------------------------------------------------------------
+
+const PHOTO_BUCKET = 'car-photos';
+const photoCache = new Map(); // carId -> { items: [{ path, url }], at, error }
+const photoLoading = new Set();
+let viewedPhoto = null;
+
+function photoStrip(carId) {
+    const cached = photoCache.get(carId);
+    const fresh = cached && Date.now() - cached.at < 45 * 60 * 1000;
+    if (!fresh && !photoLoading.has(carId)) loadPhotos(carId);
+    const add = `<button type="button" class="photo-add" data-action="add-photo" data-id="${esc(carId)}">${icon('camera')}<span>Add photos</span></button>`;
+    let body;
+    if (!navigator.onLine && !cached) body = '<p class="photo-note">Photos need a connection.</p>';
+    else if (cached?.error) body = `<p class="photo-note">${esc(cached.error)}</p>`;
+    else if (!cached) body = '<p class="photo-note">Loading photos…</p>';
+    else body = cached.items.map(p => `<button type="button" class="photo-thumb" data-action="view-photo" data-id="${esc(p.path)}"><img src="${esc(p.url)}" alt="" loading="lazy"></button>`).join('');
+    return `<div class="photos" data-photos="${esc(carId)}">${add}${body}</div>`;
+}
+
+async function loadPhotos(carId) {
+    if (!currentUser || !navigator.onLine) return;
+    photoLoading.add(carId);
+    try {
+        const { data, error } = await supabaseClient.storage.from(PHOTO_BUCKET).list(carId, { sortBy: { column: 'created_at', order: 'asc' } });
+        if (error) throw error;
+        const paths = (data || []).filter(f => f.name && !f.name.startsWith('.')).map(f => `${carId}/${f.name}`);
+        let items = [];
+        if (paths.length) {
+            const signed = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrls(paths, 3600);
+            if (signed.error) throw signed.error;
+            items = (signed.data || []).filter(x => x.signedUrl).map(x => ({ path: x.path, url: x.signedUrl }));
+        }
+        photoCache.set(carId, { items, at: Date.now() });
+    } catch (err) {
+        const missing = /bucket|not found/i.test(String(err?.message || err));
+        photoCache.set(carId, { items: [], at: Date.now(), error: missing ? "Photos aren't set up yet. See SUPABASE_SECURITY.md." : "Couldn't load photos." });
+    } finally {
+        photoLoading.delete(carId);
+    }
+    const strip = document.querySelector(`[data-photos="${CSS.escape(carId)}"]`);
+    if (strip) strip.outerHTML = photoStrip(carId);
+}
+
+function pickPhotos(carId) {
+    if (!navigator.onLine) return showToast('Photos need a connection', 'error');
+    const input = $('photo-input');
+    input.dataset.car = carId;
+    input.value = '';
+    input.click();
+}
+
+// Shrinks a photo to at most 1600px on its long side before upload.
+async function shrinkImage(file) {
+    try {
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+        return blob || file;
+    } catch {
+        return file;
+    }
+}
+
+async function uploadPickedPhotos(event) {
+    const carId = event.target.dataset.car;
+    const files = [...(event.target.files || [])].filter(f => f.type.startsWith('image/'));
+    if (!carId || !files.length) return;
+    showToast(files.length === 1 ? 'Uploading photo…' : `Uploading ${files.length} photos…`);
+    let failed = 0;
+    for (const file of files) {
+        const blob = await shrinkImage(file);
+        const path = `${carId}/${Date.now()}-${randomToken(4)}.jpg`;
+        const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+        if (error) { failed++; console.warn('Photo upload failed:', error); }
+    }
+    photoCache.delete(carId);
+    await loadPhotos(carId);
+    if (failed === files.length) showToast("Couldn't upload. Check that photos are set up in Supabase.", 'error');
+    else if (failed) showToast(`${files.length - failed} uploaded, ${failed} failed`, 'error');
+    else showToast(files.length === 1 ? 'Photo added' : 'Photos added');
+}
+
+function openPhotoViewer(path) {
+    const carId = path.split('/')[0];
+    const item = photoCache.get(carId)?.items.find(p => p.path === path);
+    if (!item) return;
+    viewedPhoto = path;
+    $('photo-viewer-img').src = item.url;
+    $('photo-viewer').hidden = false;
+}
+
+function closePhotoViewer() {
+    $('photo-viewer').hidden = true;
+    $('photo-viewer-img').removeAttribute('src');
+    viewedPhoto = null;
+}
+
+async function deleteViewedPhoto() {
+    const path = viewedPhoto;
+    if (!path) return;
+    const ok = await confirmAction({ title: 'Delete this photo?', message: "This can't be undone." });
+    if (!ok) return;
+    const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).remove([path]);
+    if (error) return showToast("Couldn't delete the photo", 'error');
+    closePhotoViewer();
+    const carId = path.split('/')[0];
+    photoCache.delete(carId);
+    await loadPhotos(carId);
+    showToast('Photo deleted');
+}
+
+async function deleteAllPhotos(carId) {
+    try {
+        const { data } = await supabaseClient.storage.from(PHOTO_BUCKET).list(carId);
+        const paths = (data || []).map(f => `${carId}/${f.name}`);
+        if (paths.length) await supabaseClient.storage.from(PHOTO_BUCKET).remove(paths);
+    } catch { /* photos are optional */ }
+    photoCache.delete(carId);
+}
+
 // Every button rendered from data uses data-action / data-id; nothing runs inline JavaScript.
 const ACTIONS = {
     'view-car': id => showDetail('car', id),
@@ -2452,16 +3067,24 @@ const ACTIONS = {
     'view-acq': id => showDetail('acq', id),
     'sell-car': id => openRecordSale(id),
     'ready-car': id => markCarReadyForSale(id),
-    'delete-car': id => deleteCar(id),
-    'delete-expense': id => deleteExpense(id),
-    'new-car': () => openNewCar(),
-    'new-expense': () => openNewExpense(),
-    'new-expense-for': id => openNewExpense(id),
+    'edit-car': id => openCarForm(id),
+    'delete-car': id => { closeSheetIfShowing('car', id); deleteCar(id); },
+    'edit-expense': id => openExpenseForm({ id }),
+    'delete-expense': id => { closeSheetIfShowing('expense', id); deleteExpense(id); },
+    'new-car': () => openCarForm(),
+    'new-expense': () => openExpenseForm(),
+    'new-expense-for': id => openExpenseForm({ carId: id }),
     'new-acq': () => openAcquisitionForm(),
     'edit-acq': id => openAcquisitionForm(id),
-    'delete-acq': id => deleteAcquisition(id),
+    'delete-acq': id => { closeSheetIfShowing('acq', id); deleteAcquisition(id); },
     'won-acq': id => openMarkWon(id),
-    'arrived': id => markAcquisitionArrived(id),
+    'arrived': id => openArrived(id),
+    'add-photo': id => pickPhotos(id),
+    'view-photo': id => openPhotoViewer(id),
+    'close-photo': () => closePhotoViewer(),
+    'delete-photo': () => deleteViewedPhoto(),
+    'discard-op': id => discardPendingOp(id),
+    'retry-sync': () => refreshCloudData({ retryFailed: true }),
     'open-filters': () => openSheet('sheet-filters'),
     'reset-filters': () => resetInventoryFilters(),
     'export-csv': () => exportCarsCSV(),
@@ -2474,8 +3097,22 @@ const ACTIONS = {
     'toggle-auth-mode': () => toggleAuthMode()
 };
 
+function closeSheetIfShowing(kind, id) {
+    if (openSheetId === 'sheet-detail' && ui.detail?.kind === kind && ui.detail?.id === id) closeSheet();
+}
+
 function wireUI() {
     document.addEventListener('click', event => {
+        if (swipeState.suppressClick) {
+            swipeState.suppressClick = false;
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        if (swipeState.open && !event.target.closest('.swipe-delete')) {
+            closeSwipe();
+            if (event.target.closest('.swipe')) return;
+        }
         const menu = $('add-menu');
         if (menu.classList.contains('open') && !event.target.closest('.menu-anchor')) closeAddMenu();
 
@@ -2495,6 +3132,7 @@ function wireUI() {
 
     document.addEventListener('keydown', event => {
         if (event.key !== 'Escape') return;
+        if (!$('photo-viewer').hidden) { closePhotoViewer(); return; }
         if ($('add-menu').classList.contains('open')) { closeAddMenu(); $('add-button').focus(); }
         else if (openSheetId) closeSheet();
     });
@@ -2502,16 +3140,23 @@ function wireUI() {
     document.querySelectorAll('.sheet').forEach(enableSheetDrag);
 
     $('auth-form').addEventListener('submit', handleAuthSubmit);
-    $('form-add-car').addEventListener('submit', handleAddCar);
-    $('form-add-expense').addEventListener('submit', handleAddExpense);
+    $('form-add-car').addEventListener('submit', handleSaveCar);
+    $('form-add-expense').addEventListener('submit', handleSaveExpense);
+    $('form-arrived').addEventListener('submit', handleArrived);
+    $('photo-input').addEventListener('change', uploadPickedPhotos);
+    document.addEventListener('change', event => {
+        const select = event.target.closest('[data-status-car]');
+        if (select) changeCarStatus(select.dataset.statusCar, select.value);
+    });
     $('form-record-sale').addEventListener('submit', handleRecordSale);
     $('form-acquisition').addEventListener('submit', handleSaveAcquisition);
     $('form-acq-won').addEventListener('submit', handleMarkAcquisitionWon);
 
     $('form-acquisition').addEventListener('input', updateAcquisitionCalculator);
-    [['car-make', 'car-model', 'car-type-hint'], ['acq-make', 'acq-model', 'acq-type-hint']].forEach(([makeId, modelId, hintId]) => {
-        const update = () => updateTypeHint(makeId, modelId, hintId);
-        [makeId, modelId].forEach(id => { $(id).addEventListener('input', update); $(id).addEventListener('change', update); });
+    ['car', 'acq'].forEach(prefix => {
+        const update = () => updateTypeHint(prefix);
+        [`${prefix}-make`, `${prefix}-model`].forEach(id => { $(id).addEventListener('input', update); $(id).addEventListener('change', update); });
+        $(`${prefix}-vin`).addEventListener('input', () => lookupVin(prefix));
     });
     $('sale-price').addEventListener('input', updateSalePreview);
     $('inventory-search').addEventListener('input', renderInventory);
@@ -2525,6 +3170,12 @@ function wireUI() {
     initSegment($('expense-segment'), ui.expenseType, value => { ui.expenseType = value; renderExpenses(); });
     initSegment($('sourcing-segment'), ui.sourcingStage, value => { ui.sourcingStage = value; renderSourcing(); });
     initSegment($('expense-type-segment'), 'VEHICLE', value => setExpenseType(value));
+    initSegment($('dashboard-period'), ui.period, setPeriod);
+    initSegment($('reports-period'), ui.period, setPeriod);
+
+    enableSwipeRows();
+    enablePullToRefresh();
+    trackVisualViewport();
 
     initCombos();
     watchLargeTitles();
