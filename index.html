@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AutoMedusa">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+    <meta name="automedusa-version" content="__APP_VERSION__">
+    <title>AutoMedusa</title>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module" src="/src/main.js"></script>
+</head>
+<body class="h-full flex flex-col font-sans antialiased text-slate-200 bg-slate-950">
+
+<div id="app-shell" class="flex h-screen overflow-hidden" hidden>
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 hidden md:flex">
+        <div>
+            <!-- Dealership Branding -->
+            <div class="p-4 flex items-center gap-3">
+                <img src="/auto-medusa-emblem-128.png" alt="" width="40" height="40" class="w-10 h-10 rounded-xl object-cover shrink-0" />
+                <div class="min-w-0">
+                    <h1 class="font-semibold text-white text-[15px] tracking-tight whitespace-nowrap">AutoMedusa</h1>
+                    <p class="text-xs text-slate-500">Dealer management</p>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="px-3 py-2 space-y-0.5" aria-label="Sections">
+                <button type="button" data-tab="dashboard" id="nav-dashboard" class="nav-link">
+                    <i class="fa-solid fa-chart-pie w-5" aria-hidden="true"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button type="button" data-tab="inventory" id="nav-inventory" class="nav-link">
+                    <i class="fa-solid fa-car w-5" aria-hidden="true"></i>
+                    <span>Inventory</span>
+                </button>
+                <button type="button" data-tab="expenses" id="nav-expenses" class="nav-link">
+                    <i class="fa-solid fa-receipt w-5" aria-hidden="true"></i>
+                    <span>Expenses</span>
+                </button>
+                <button type="button" data-tab="sourcing" id="nav-sourcing" class="nav-link">
+                    <i class="fa-solid fa-gavel w-5" aria-hidden="true"></i>
+                    <span>Sourcing</span>
+                </button>
+                <button type="button" data-tab="reports" id="nav-reports" class="nav-link">
+                    <i class="fa-solid fa-chart-line w-5" aria-hidden="true"></i>
+                    <span>Reports</span>
+                </button>
+            </nav>
+        </div>
+
+        <div class="p-3">
+            <div class="bg-slate-800/60 p-3 rounded-xl mb-2">
+                <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                    <span>Cloud sync</span>
+                    <span id="sync-status" class="text-slate-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Signed out</span>
+                </div>
+                <p class="text-xs text-slate-300 num" id="storage-count">0 vehicles</p>
+                <p class="text-xs text-slate-500 mt-1 truncate" id="signed-in-user">Not signed in</p>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <button type="button" onclick="refreshCloudData({ retryFailed: true })" class="w-full text-xs text-slate-400 hover:text-white py-2 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> Refresh
+                </button>
+                <button type="button" onclick="signOutAutoMedusa()" class="w-full text-xs text-slate-400 hover:text-white py-2 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out
+                </button>
+                <button type="button" onclick="diagnoseCloud()" data-debug-only hidden class="col-span-2 w-full text-xs text-slate-500 hover:text-white py-2 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-stethoscope" aria-hidden="true"></i> Run cloud diagnostic
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header class="app-header bg-slate-950/80 backdrop-blur-xl border-b border-slate-800 px-6 py-4 flex items-center justify-between gap-3 shrink-0">
+            <h2 id="page-title" tabindex="-1" class="text-[22px] sm:text-2xl font-bold text-white tracking-tight truncate min-w-0">Dashboard</h2>
+
+            <!-- Header Quick Actions -->
+            <div class="app-header-actions flex items-center gap-2 shrink-0">
+                <button id="sync-status-header" type="button" onclick="refreshCloudData({ retryFailed: true })" title="Sync status. Click to refresh." class="hidden sm:inline-flex text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 whitespace-nowrap">Offline</button>
+                <button type="button" onclick="openModal('modal-add-expense')" aria-label="Add expense" class="bg-slate-800 hover:bg-slate-700 text-slate-100 h-9 px-3 rounded-full text-sm font-semibold transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                    <span class="hidden sm:inline">Expense</span>
+                </button>
+                <button type="button" onclick="openModal('modal-add-car')" class="bg-blue-600 hover:bg-blue-500 text-white h-9 px-4 rounded-full text-sm font-semibold transition flex items-center gap-2">
+                    <i class="fa-solid fa-car-side" aria-hidden="true"></i>
+                    <span>Add car</span>
+                </button>
+                <button id="mobile-menu-button"
+                        type="button"
+                        aria-label="Account and sync"
+                        aria-controls="mobile-nav"
+                        aria-expanded="false"
+                        onclick="toggleMobileNav()"
+                        class="md:hidden w-9 h-9 shrink-0 flex items-center justify-center rounded-full bg-slate-800 text-slate-200 relative">
+                    <i class="fa-solid fa-user text-sm pointer-events-none" aria-hidden="true"></i>
+                    <span id="account-sync-dot" class="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-slate-500 ring-2 ring-black"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Account sheet (iPhone) -->
+        <div id="mobile-nav" aria-hidden="true" class="fixed inset-0 bg-black/50 md:hidden flex items-end" role="dialog" aria-modal="true" aria-labelledby="account-sheet-title">
+            <div class="account-sheet w-full bg-slate-900 rounded-t-[20px] px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <div class="mx-auto w-9 h-1.5 rounded-full bg-slate-600 mb-3" aria-hidden="true"></div>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 id="account-sheet-title" class="text-[17px] font-semibold text-white">Account</h2>
+                    <button type="button" onclick="closeMobileNav()" aria-label="Close" class="w-11 h-11 -mr-2 flex items-center justify-center text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg pointer-events-none" aria-hidden="true"></i></button>
+                </div>
+                <div class="bg-slate-800 rounded-xl divide-y divide-slate-700">
+                    <div class="px-4 py-3 flex items-center justify-between gap-3">
+                        <span class="text-[15px] text-slate-200 shrink-0">Signed in as</span>
+                        <span id="mobile-signed-in-user" class="text-[15px] text-slate-400 truncate">—</span>
+                    </div>
+                    <div class="px-4 py-3 flex items-center justify-between gap-3">
+                        <span class="text-[15px] text-slate-200 shrink-0">Cloud sync</span>
+                        <span id="mobile-sync-status" class="text-[15px] text-slate-400 truncate">—</span>
+                    </div>
+                    <button type="button" onclick="refreshCloudData({ retryFailed: true }); closeMobileNav();" class="w-full px-4 py-3 min-h-[44px] text-left text-[15px] text-blue-400">Refresh now</button>
+                    <button type="button" onclick="diagnoseCloud()" data-debug-only hidden class="w-full px-4 py-3 min-h-[44px] text-left text-[15px] text-blue-400">Run cloud diagnostic</button>
+                </div>
+                <button id="mobile-signout-btn" type="button" onclick="closeMobileNav(); signOutAutoMedusa();" class="mt-4 w-full bg-slate-800 rounded-xl px-4 py-3 min-h-[44px] text-[15px] font-semibold text-rose-400">Sign out</button>
+            </div>
+        </div>
+
+        <!-- Scrollable Dashboard Body -->
+        <main id="app-main" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+
+            <!-- SECTION: Dashboard View -->
+            <div id="tab-dashboard" class="tab-content space-y-6">
+                <!-- KPI Summary Cards Grid -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <div class="flex items-center gap-2 text-[13px] font-medium text-slate-400">
+                            <i class="fa-solid fa-warehouse text-blue-400" aria-hidden="true"></i><span>Inventory value</span>
+                        </div>
+                        <p class="text-[28px] leading-tight font-semibold tracking-tight text-white mt-2 num" id="kpi-inv-value">$0</p>
+                        <p class="text-[13px] text-slate-500 mt-1" id="kpi-active-count">0 vehicles in stock</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <div class="flex items-center gap-2 text-[13px] font-medium text-slate-400">
+                            <i class="fa-solid fa-wrench text-blue-400" aria-hidden="true"></i><span>Expenses</span>
+                        </div>
+                        <p class="text-[28px] leading-tight font-semibold tracking-tight text-white mt-2 num" id="kpi-total-expenses">$0</p>
+                        <p class="text-[13px] text-slate-500 mt-1" id="kpi-recond-split">Reconditioning and overhead</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <div class="flex items-center gap-2 text-[13px] font-medium text-slate-400">
+                            <i class="fa-solid fa-sack-dollar text-blue-400" aria-hidden="true"></i><span>Revenue</span>
+                        </div>
+                        <p class="text-[28px] leading-tight font-semibold tracking-tight text-white mt-2 num" id="kpi-total-revenue">$0</p>
+                        <p class="text-[13px] text-slate-500 mt-1" id="kpi-sold-count">0 vehicles sold</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <div class="flex items-center gap-2 text-[13px] font-medium text-slate-400">
+                            <i class="fa-solid fa-chart-line text-blue-400" aria-hidden="true"></i><span>Net profit</span>
+                        </div>
+                        <p class="text-[28px] leading-tight font-semibold tracking-tight text-emerald-400 mt-2 num" id="kpi-net-profit">$0</p>
+                        <p class="text-[13px] text-slate-500 mt-1" id="kpi-avg-roi">0% average return</p>
+                    </div>
+                </div>
+
+                <!-- Charts Section -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                    <div class="lg:col-span-2 glass-panel p-5 rounded-2xl">
+                        <div class="flex items-baseline justify-between mb-4 gap-3">
+                            <h3 class="font-semibold text-white text-[17px]">Sales and expenses</h3>
+                            <span class="text-[13px] text-slate-500">By month</span>
+                        </div>
+                        <div class="h-64 relative">
+                            <canvas id="chart-profit" role="img" aria-label="Monthly sales and expenses chart"></canvas>
+                            <p id="chart-profit-empty" class="hidden absolute inset-0 flex items-center justify-center text-center text-[15px] text-slate-500 px-6">Sales and dated expenses will appear here by month.</p>
+                        </div>
+                        <p id="chart-profit-note" class="hidden text-[13px] text-slate-500 mt-3"></p>
+                    </div>
+
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <div class="flex items-baseline justify-between mb-4">
+                            <h3 class="font-semibold text-white text-[17px]">Expenses by category</h3>
+                        </div>
+                        <div class="h-64 relative">
+                            <canvas id="chart-expenses" role="img" aria-label="Expenses by category chart"></canvas>
+                            <p id="chart-expenses-empty" class="hidden absolute inset-0 flex items-center justify-center text-center text-[15px] text-slate-500 px-6">No expenses recorded yet.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Vehicles & Quick Status -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold text-white text-[17px]">Recently added</h3>
+                            <button type="button" data-tab="inventory" class="text-[15px] text-blue-400 hover:text-blue-300">See all</button>
+                        </div>
+                        <ul id="recent-cars-list" class="divide-y divide-slate-800"></ul>
+                    </div>
+
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold text-white text-[17px]">Latest expenses</h3>
+                            <button type="button" data-tab="expenses" class="text-[15px] text-blue-400 hover:text-blue-300">See all</button>
+                        </div>
+                        <ul id="recent-expenses-list" class="divide-y divide-slate-800"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: Inventory Tab -->
+            <div id="tab-inventory" class="tab-content hidden space-y-5">
+                <!-- Filters and Search Bar -->
+                <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-4">
+                    <div class="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
+                        <div class="relative w-full xl:max-w-md">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm" aria-hidden="true"></i>
+                            <input type="search" id="inventory-search" oninput="renderInventoryTable()" placeholder="Search" aria-label="Search by VIN, make, model, year or stock number" class="w-full bg-slate-800 border-0 text-slate-100 text-[15px] rounded-xl pl-9 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" id="inventory-filter-toggle" onclick="toggleInventoryFilters()" aria-expanded="false" aria-controls="inventory-filter-panel" class="md:hidden bg-slate-800 hover:bg-slate-700 text-slate-100 h-9 px-3 rounded-full text-sm font-medium flex items-center gap-2">
+                                <i class="fa-solid fa-sliders" aria-hidden="true"></i> <span id="inventory-filter-toggle-label">Filters</span>
+                            </button>
+                            <button type="button" onclick="resetInventoryFilters()" class="bg-slate-800 hover:bg-slate-700 text-slate-100 h-9 px-3 rounded-full text-sm font-medium flex items-center gap-2">
+                                Reset
+                            </button>
+                            <button type="button" onclick="exportCarsCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-100 h-9 px-3 rounded-full text-sm font-medium flex items-center gap-2">
+                                <i class="fa-solid fa-download" aria-hidden="true"></i> Export CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="inventory-filter-panel" class="max-md:hidden space-y-3">
+                    <div class="inventory-filter-grid grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+                        <select id="filter-status" onchange="renderInventoryTable()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                            <option value="ALL">All Statuses</option>
+                            <option value="FOR_SALE">For Sale</option>
+                            <option value="IN_PREP">In Preparation</option>
+                            <option value="PENDING">Pending Sale</option>
+                            <option value="SOLD">Sold</option>
+                        </select>
+                        <select id="filter-vehicle-type" onchange="renderInventoryTable()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                            <option value="ALL">All Vehicle Types</option>
+                            <option value="SUV">SUV</option>
+                            <option value="Sedan">Sedan</option>
+                            <option value="Truck">Truck</option>
+                            <option value="Van">Van</option>
+                            <option value="Minivan">Minivan</option>
+                            <option value="Coupe">Coupe</option>
+                            <option value="Hatchback">Hatchback</option>
+                            <option value="Wagon">Wagon</option>
+                            <option value="Convertible">Convertible</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <select id="filter-age" onchange="renderInventoryTable()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                            <option value="ALL">All Market Ages</option>
+                            <option value="0-14">0–14 days</option>
+                            <option value="15-30">15–30 days</option>
+                            <option value="31-60">31–60 days</option>
+                            <option value="61+">61+ days</option>
+                        </select>
+                        <input type="number" id="filter-min-price" min="0" step="100" oninput="renderInventoryTable()" placeholder="Min cost $" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                        <input type="number" id="filter-max-price" min="0" step="100" oninput="renderInventoryTable()" placeholder="Max cost $" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                        <input type="date" id="filter-date-from" onchange="renderInventoryTable()" title="Bought on or after" aria-label="Bought on or after" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                        <input type="date" id="filter-date-to" onchange="renderInventoryTable()" title="Bought on or before" aria-label="Bought on or before" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                        <select id="sort-inventory" onchange="renderInventoryTable()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
+                            <option value="newest">Newest Purchase</option>
+                            <option value="oldest">Oldest Purchase</option>
+                            <option value="age-desc">Longest on Market</option>
+                            <option value="age-asc">Shortest on Market</option>
+                            <option value="price-desc">Highest Cost Basis</option>
+                            <option value="price-asc">Lowest Cost Basis</option>
+                            <option value="profit-desc">Highest Realized Profit</option>
+                        </select>
+                    </div>
+                    <p class="text-[13px] text-slate-500">Price filters use total cost. Date filters use the purchase date. Days on market runs from the listed date to the sold date, or today if unsold.</p>
+                    </div>
+                </div>
+
+                <!-- Inventory Health / Capital Efficiency -->
+                <div id="inventory-summary" class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <!-- Dynamic summary cards -->
+                </div>
+
+                <!-- Vehicles list (iPhone) -->
+                <ul id="inventory-cards" class="md:hidden glass-panel rounded-2xl divide-y divide-slate-800 overflow-hidden"></ul>
+
+                <!-- Vehicles Data Table -->
+                <div class="hidden md:block glass-panel rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-900/80 border-b border-slate-800 text-xs font-semibold text-slate-400">
+                                    <th class="py-3.5 px-4">Vehicle Details</th>
+                                    <th class="py-3.5 px-4">VIN / Stock #</th>
+                                    <th class="py-3.5 px-4">Buy / Listed</th>
+                                    <th class="py-3.5 px-4">Purchase Price</th>
+                                    <th class="py-3.5 px-4">Recond / Cost Basis</th>
+                                    <th class="py-3.5 px-4">Sold Date</th>
+                                    <th class="py-3.5 px-4">Days on Market</th>
+                                    <th class="py-3.5 px-4">Status</th>
+                                    <th class="py-3.5 px-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-tbody" class="divide-y divide-slate-800 text-sm">
+                                <!-- Dynamic dynamic rows rendered via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: Expense Tracker Tab -->
+            <div id="tab-expenses" class="tab-content hidden space-y-5">
+                <div class="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-between">
+                    <div class="expense-filter-controls w-full md:w-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <select id="expense-type-filter" onchange="renderExpensesTable()" class="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none">
+                            <option value="ALL">All Expenses</option>
+                            <option value="VEHICLE">Vehicle Specific (Reconditioning)</option>
+                            <option value="OVERHEAD">Dealership Overhead (Rent, Admin, Marketing)</option>
+                        </select>
+                        <select id="expense-category-filter" onchange="renderExpensesTable()" class="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none">
+                            <option value="ALL">All Categories</option>
+                            <option value="Imported Reconditioning">Imported Reconditioning</option>
+                            <option value="Mechanical Repair">Mechanical Repair</option>
+                            <option value="Bodywork & Paint">Bodywork & Paint</option>
+                            <option value="Detailing">Detailing</option>
+                            <option value="Parts">Parts</option>
+                            <option value="Inspection & Emission">Inspection & Emission</option>
+                            <option value="Facility & Rent">Facility & Rent</option>
+                            <option value="Marketing & Ads">Marketing & Ads</option>
+                            <option value="License & Transport">License & Transport</option>
+                        </select>
+                    </div>
+                    <button type="button" onclick="openModal('modal-add-expense')" class="w-full md:w-auto justify-center bg-blue-600 hover:bg-blue-500 text-white h-10 px-4 rounded-full text-[15px] font-semibold transition flex items-center gap-2">
+                        <i class="fa-solid fa-plus" aria-hidden="true"></i> Add expense
+                    </button>
+                </div>
+
+                <!-- Expenses list (iPhone) -->
+                <ul id="expenses-cards" class="md:hidden glass-panel rounded-2xl divide-y divide-slate-800 overflow-hidden"></ul>
+
+                <!-- Expenses Table -->
+                <div class="hidden md:block glass-panel rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-900/80 border-b border-slate-800 text-xs font-semibold text-slate-400">
+                                    <th class="py-3.5 px-4">Date</th>
+                                    <th class="py-3.5 px-4">Category</th>
+                                    <th class="py-3.5 px-4">Associated Vehicle</th>
+                                    <th class="py-3.5 px-4">Vendor / Notes</th>
+                                    <th class="py-3.5 px-4">Amount</th>
+                                    <th class="py-3.5 px-4 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expenses-tbody" class="divide-y divide-slate-800 text-sm">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: Acquisition Pipeline Tab -->
+            <div id="tab-sourcing" class="tab-content hidden space-y-5">
+                <div class="glass-panel p-4 sm:p-6 rounded-2xl border border-slate-800">
+                    <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h3 class="text-[20px] font-semibold text-white">Sourcing pipeline</h3>
+                                <span id="acquisition-cloud-note" class="hidden text-xs font-semibold px-2 py-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400">Pipeline sync setup needed</span>
+                            </div>
+                            <p class="text-[15px] text-slate-400 mt-1">Watch a car before you buy it, set a safe maximum bid, track delivery, then move it into inventory when it arrives.</p>
+                        </div>
+                        <button onclick="openAcquisitionModal()"
+                                class="w-full lg:w-auto shrink-0 bg-blue-600 hover:bg-blue-500 text-white h-10 px-4 rounded-full text-[15px] font-semibold transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                            Add to watchlist
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+                        <!-- Source Column: Auction Bids -->
+                        <div class="bg-slate-950/60 rounded-2xl p-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="font-semibold text-white text-[15px]">Watchlist</span>
+                                <span class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-full font-semibold num" id="count-auction">0</span>
+                            </div>
+                            <div id="pipeline-auction" class="space-y-3">
+                                <!-- Cards -->
+                            </div>
+                        </div>
+
+                        <!-- Source Column: In Transit / Purchased -->
+                        <div class="bg-slate-950/60 rounded-2xl p-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="font-semibold text-white text-[15px]">In transport</span>
+                                <span class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-full font-semibold num" id="count-transit">0</span>
+                            </div>
+                            <div id="pipeline-transit" class="space-y-3">
+                                <!-- Cards -->
+                            </div>
+                        </div>
+
+                        <!-- Source Column: Arrived / Reconditioning -->
+                        <div class="bg-slate-950/60 rounded-2xl p-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="font-semibold text-white text-[15px]">Arrived, in prep</span>
+                                <span class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-full font-semibold num" id="count-arrived">0</span>
+                            </div>
+                            <div id="pipeline-arrived" class="space-y-3">
+                                <!-- Cards -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: Financial Reports Tab -->
+            <div id="tab-reports" class="tab-content hidden space-y-6">
+                <!-- Summary P&L Statement -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                    <h3 class="text-[20px] font-semibold text-white mb-4">Profit and loss</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-slate-800 pt-4">
+                        <div class="space-y-3">
+                            <div class="flex justify-between text-sm py-2 border-b border-slate-800">
+                                <span class="text-slate-400">Gross Vehicle Sales Revenue</span>
+                                <span class="font-bold text-slate-100" id="report-gross-sales">$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm py-2 border-b border-slate-800">
+                                <span class="text-slate-400">Less: Total Vehicle Acquisition Costs (COGS)</span>
+                                <span class="font-bold text-rose-400" id="report-cogs">-$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm py-2 border-b border-slate-800 bg-slate-900/50 px-3 rounded-lg">
+                                <span class="font-semibold text-slate-200">Gross Vehicle Margin</span>
+                                <span class="font-bold text-emerald-400" id="report-gross-margin">$0.00</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex justify-between text-sm py-2 border-b border-slate-800">
+                                <span class="text-slate-400">Reconditioning & Prep (Sold Vehicles)</span>
+                                <span class="font-bold text-amber-400" id="report-recond-total">-$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm py-2 border-b border-slate-800">
+                                <span class="text-slate-400">General Dealership Overhead Expenses</span>
+                                <span class="font-bold text-amber-400" id="report-overhead-total">-$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm py-2 border-b border-slate-800 bg-emerald-950/40 border-emerald-500/20 px-3 rounded-lg">
+                                <span class="font-bold text-emerald-300">Net Realized Profit</span>
+                                <span class="font-semibold text-xl text-emerald-400" id="report-net-profit">$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vehicle Profitability Breakdown Table -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                    <h4 class="font-semibold text-white mb-4 text-[17px]">Sold cars: return on each</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-900 text-slate-400 border-b border-slate-800 uppercase">
+                                <tr>
+                                    <th class="p-3">Vehicle</th>
+                                    <th class="p-3">Buy Price</th>
+                                    <th class="p-3">Recond Cost</th>
+                                    <th class="p-3">Total Investment</th>
+                                    <th class="p-3">Sold Price</th>
+                                    <th class="p-3">Net Margin</th>
+                                    <th class="p-3">ROI %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sold-cars-report-tbody" class="divide-y divide-slate-800 text-slate-200">
+                                <!-- Dynamic rows for sold vehicles -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom tab bar (iPhone) -->
+        <nav class="tab-bar" aria-label="Sections">
+            <button type="button" data-tab="dashboard"><i class="fa-solid fa-chart-pie" aria-hidden="true"></i><span>Dashboard</span></button>
+            <button type="button" data-tab="inventory"><i class="fa-solid fa-car" aria-hidden="true"></i><span>Inventory</span></button>
+            <button type="button" data-tab="expenses"><i class="fa-solid fa-receipt" aria-hidden="true"></i><span>Expenses</span></button>
+            <button type="button" data-tab="sourcing"><i class="fa-solid fa-gavel" aria-hidden="true"></i><span>Sourcing</span></button>
+            <button type="button" data-tab="reports"><i class="fa-solid fa-chart-line" aria-hidden="true"></i><span>Reports</span></button>
+        </nav>
+    </div>
+</div>
+
+<!-- MODAL 1: Add New Car Purchased -->
+<div id="modal-add-car" role="dialog" aria-modal="true" class="app-modal fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl p-6">
+        <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-car text-blue-400"></i> Log Car Purchase</h3>
+            <button type="button" onclick="closeModal(\'modal-add-car\')" aria-label="Close" class="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form id="form-add-car" onsubmit="handleAddCar(event)" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label for="car-year" class="block text-[13px] font-medium text-slate-400 mb-1">Year *</label>
+                    <input type="number" id="car-year" min="1990" max="2027" required placeholder="2020" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="car-make" class="block text-[13px] font-medium text-slate-400 mb-1">Make *</label>
+                    <input type="text" id="car-make" required placeholder="Toyota" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="car-model" class="block text-[13px] font-medium text-slate-400 mb-1">Model *</label>
+                    <input type="text" id="car-model" required placeholder="Camry" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label for="car-vin" class="block text-[13px] font-medium text-slate-400 mb-1">VIN (17 characters)</label>
+                    <input type="text" id="car-vin" maxlength="17" pattern="[A-HJ-NPR-Za-hj-npr-z0-9]{17}" title="17 letters and numbers (no I, O or Q)" autocapitalize="characters" spellcheck="false" placeholder="4T1B11HK2LU123456" class="w-full uppercase font-mono bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="car-mileage" class="block text-[13px] font-medium text-slate-400 mb-1">Mileage (km) *</label>
+                    <input type="number" id="car-mileage" required min="0" inputmode="numeric" placeholder="45000" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label for="car-purchase-price" class="block text-[13px] font-medium text-slate-400 mb-1">Purchase Price ($) *</label>
+                    <input type="number" step="0.01" min="0" inputmode="decimal" id="car-purchase-price" required placeholder="14500.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="car-purchase-date" class="block text-[13px] font-medium text-slate-400 mb-1">Purchase Date *</label>
+                    <input type="date" id="car-purchase-date" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label for="car-listed-date" class="block text-[13px] font-medium text-slate-400 mb-1">Listed Date</label>
+                    <input type="date" id="car-listed-date" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <p class="text-xs text-slate-500 mt-1">When the vehicle actually went on the market.</p>
+                </div>
+                <div>
+                    <label for="car-vehicle-type" class="block text-[13px] font-medium text-slate-400 mb-1">Vehicle Type *</label>
+                    <select id="car-vehicle-type" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <option value="SUV">SUV</option>
+                        <option value="Sedan">Sedan</option>
+                        <option value="Truck">Truck</option>
+                        <option value="Van">Van</option>
+                        <option value="Minivan">Minivan</option>
+                        <option value="Coupe">Coupe</option>
+                        <option value="Hatchback">Hatchback</option>
+                        <option value="Wagon">Wagon</option>
+                        <option value="Convertible">Convertible</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label for="car-source" class="block text-[13px] font-medium text-slate-400 mb-1">Acquisition Source</label>
+                    <select id="car-source" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <option value="Copart Auction">Copart Auction</option>
+                        <option value="Adesa Auction">Adesa Auction</option>
+                        <option value="Trade-in">Customer Trade-in</option>
+                        <option value="Private Seller">Private Seller</option>
+                        <option value="Off-Lease">Off-Lease Repo</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="car-target-price" class="block text-[13px] font-medium text-slate-400 mb-1">Target Sale Price ($)</label>
+                    <input type="number" step="0.01" min="0" inputmode="decimal" id="car-target-price" placeholder="18500.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div>
+                <label for="car-notes" class="block text-[13px] font-medium text-slate-400 mb-1">Notes / Description</label>
+                <textarea id="car-notes" rows="2" placeholder="Clean title, minor dent on rear door, needs detailing..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"></textarea>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button type="button" onclick="closeModal('modal-add-car')" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-400 hover:text-white">Cancel</button>
+                <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white">Save Car to Inventory</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 2: Record Sale -->
+<div id="modal-record-sale" role="dialog" aria-modal="true" class="app-modal fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-handshake text-blue-400"></i> Record Vehicle Sale</h3>
+            <button type="button" onclick="closeModal(\'modal-record-sale\')" aria-label="Close" class="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form id="form-record-sale" onsubmit="handleRecordSale(event)" class="space-y-4">
+            <input type="hidden" id="sale-car-id">
+            <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
+                <span class="text-xs text-slate-400 block">Selling Vehicle</span>
+                <span class="font-bold text-white text-base" id="sale-vehicle-title">---</span>
+                <span class="text-xs text-slate-400 block mt-1" id="sale-vehicle-cost">Total Cost Basis: $0.00</span>
+            </div>
+
+            <div>
+                <label for="sale-price" class="block text-[13px] font-medium text-slate-400 mb-1">Final Sale Price ($) *</label>
+                <input type="number" step="0.01" min="0.01" inputmode="decimal" id="sale-price" required placeholder="18000.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label for="sale-date" class="block text-[13px] font-medium text-slate-400 mb-1">Date Sold *</label>
+                <input type="date" id="sale-date" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label for="sale-buyer" class="block text-[13px] font-medium text-slate-400 mb-1">Buyer Name / Customer</label>
+                <input type="text" id="sale-buyer" placeholder="John Smith" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button type="button" onclick="closeModal('modal-record-sale')" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-400 hover:text-white">Cancel</button>
+                <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white">Complete Sale</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 3: Log Expense -->
+<div id="modal-add-expense" role="dialog" aria-modal="true" class="app-modal fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-receipt text-blue-400"></i> Record Dealership Expense</h3>
+            <button type="button" onclick="closeModal(\'modal-add-expense\')" aria-label="Close" class="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form id="form-add-expense" onsubmit="handleAddExpense(event)" class="space-y-4">
+            <div>
+                <label for="expense-type" class="block text-[13px] font-medium text-slate-400 mb-1">Expense Type *</label>
+                <select id="expense-type" onchange="toggleExpenseVehicleSelect()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <option value="VEHICLE">Vehicle Specific (Reconditioning / Repair)</option>
+                    <option value="OVERHEAD">Dealership General Overhead</option>
+                </select>
+            </div>
+
+            <div id="expense-vehicle-container">
+                <label for="expense-car-id" class="block text-[13px] font-medium text-slate-400 mb-1">Select Associated Vehicle *</label>
+                <select id="expense-car-id" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <!-- Populated dynamically -->
+                </select>
+            </div>
+
+            <div>
+                <label for="expense-category" class="block text-[13px] font-medium text-slate-400 mb-1">Expense Category *</label>
+                <select id="expense-category" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <option value="Mechanical Repair">Mechanical Repair</option>
+                    <option value="Bodywork & Paint">Bodywork & Paint</option>
+                    <option value="Detailing">Detailing</option>
+                    <option value="Parts">Parts</option>
+                    <option value="Inspection & Emission">Inspection & Emission</option>
+                    <option value="Facility & Rent">Facility & Rent</option>
+                    <option value="Marketing & Ads">Marketing & Ads</option>
+                    <option value="License & Transport">License & Transport</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label for="expense-amount" class="block text-[13px] font-medium text-slate-400 mb-1">Amount ($) *</label>
+                    <input type="number" step="0.01" min="0.01" inputmode="decimal" id="expense-amount" required placeholder="350.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="expense-date" class="block text-[13px] font-medium text-slate-400 mb-1">Date *</label>
+                    <input type="date" id="expense-date" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div>
+                <label for="expense-notes" class="block text-[13px] font-medium text-slate-400 mb-1">Vendor / Mechanic / Notes</label>
+                <input type="text" id="expense-notes" placeholder="e.g., Quick Lube, 4 New Tires..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button type="button" onclick="closeModal('modal-add-expense')" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-400 hover:text-white">Cancel</button>
+                <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white">Save Expense</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- MODAL: Add / Edit Acquisition Target -->
+<div id="modal-acquisition" role="dialog" aria-modal="true" class="app-modal fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6">
+        <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">
+            <div>
+                <h3 id="acquisition-modal-title" class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-gavel text-blue-400"></i> Add Acquisition Target
+                </h3>
+                <p class="text-xs text-slate-500 mt-1">Estimates stay separate from actual dealership expenses until you record them.</p>
+            </div>
+            <button type="button" onclick="closeModal(\'modal-acquisition\')" aria-label="Close" class="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form id="form-acquisition" onsubmit="handleSaveAcquisition(event)" class="space-y-5">
+            <input type="hidden" id="acq-id">
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label for="acq-year" class="block text-[13px] font-medium text-slate-400 mb-1">Year *</label>
+                    <input id="acq-year" type="number" min="1990" max="2030" required placeholder="2020"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="acq-make" class="block text-[13px] font-medium text-slate-400 mb-1">Make *</label>
+                    <input id="acq-make" type="text" required placeholder="Toyota"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="acq-model" class="block text-[13px] font-medium text-slate-400 mb-1">Model *</label>
+                    <input id="acq-model" type="text" required placeholder="RAV4"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label for="acq-vehicle-type" class="block text-[13px] font-medium text-slate-400 mb-1">Vehicle Type</label>
+                    <select id="acq-vehicle-type" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <option value="SUV">SUV</option>
+                        <option value="Sedan">Sedan</option>
+                        <option value="Truck">Truck</option>
+                        <option value="Van">Van</option>
+                        <option value="Minivan">Minivan</option>
+                        <option value="Coupe">Coupe</option>
+                        <option value="Hatchback">Hatchback</option>
+                        <option value="Wagon">Wagon</option>
+                        <option value="Convertible">Convertible</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="acq-mileage" class="block text-[13px] font-medium text-slate-400 mb-1">Mileage (km)</label>
+                    <input id="acq-mileage" type="number" min="0" placeholder="95000"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="acq-vin" class="block text-[13px] font-medium text-slate-400 mb-1">VIN</label>
+                    <input id="acq-vin" type="text" maxlength="17" pattern="[A-HJ-NPR-Za-hj-npr-z0-9]{17}" title="17 letters and numbers (no I, O or Q)" autocapitalize="characters" spellcheck="false" placeholder="Optional"
+                           class="w-full uppercase font-mono bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label for="acq-source" class="block text-[13px] font-medium text-slate-400 mb-1">Source *</label>
+                    <select id="acq-source" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <option value="Copart">Copart</option>
+                        <option value="Copart Auction">Copart Auction</option>
+                        <option value="OPENLANE / ADESA">OPENLANE / ADESA</option>
+                        <option value="Private Seller">Private Seller</option>
+                        <option value="Trade-in">Trade-in</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="acq-auction-at" class="block text-[13px] font-medium text-slate-400 mb-1">Auction / Decision Time</label>
+                    <input id="acq-auction-at" type="datetime-local"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="acq-source-url" class="block text-[13px] font-medium text-slate-400 mb-1">Listing URL</label>
+                    <input id="acq-source-url" type="url" placeholder="https://..."
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                        <h4 class="font-bold text-white text-sm">Bid & Margin Calculator</h4>
+                        <p class="text-xs text-slate-500">Max Safe Bid = expected sale − desired profit − fees − transport − repairs.</p>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="block text-xs text-slate-500">Max Safe Bid</span>
+                        <span id="acq-safe-bid-preview" class="font-semibold text-lg text-emerald-400">$0.00</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div>
+                        <label for="acq-current-bid" class="block text-[13px] font-medium text-slate-400 mb-1">Current Bid / Ask</label>
+                        <input id="acq-current-bid" type="number" min="0" step="0.01" oninput="updateAcquisitionCalculator()" placeholder="7500"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="acq-max-bid" class="block text-[13px] font-medium text-slate-400 mb-1">Your Bid Cap</label>
+                        <input id="acq-max-bid" type="number" min="0" step="0.01" placeholder="Optional"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="acq-expected-sale" class="block text-[13px] font-medium text-slate-400 mb-1">Expected Sale *</label>
+                        <input id="acq-expected-sale" type="number" min="0" step="0.01" required oninput="updateAcquisitionCalculator()" placeholder="14000"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="acq-desired-profit" class="block text-[13px] font-medium text-slate-400 mb-1">Desired Profit</label>
+                        <input id="acq-desired-profit" type="number" min="0" step="0.01" oninput="updateAcquisitionCalculator()" value="3000"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="acq-est-fees" class="block text-[13px] font-medium text-slate-400 mb-1">Est. Auction Fees</label>
+                        <input id="acq-est-fees" type="number" min="0" step="0.01" oninput="updateAcquisitionCalculator()" placeholder="800"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="acq-est-transport" class="block text-[13px] font-medium text-slate-400 mb-1">Est. Transport</label>
+                        <input id="acq-est-transport" type="number" min="0" step="0.01" oninput="updateAcquisitionCalculator()" placeholder="500"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="acq-est-repairs" class="block text-[13px] font-medium text-slate-400 mb-1">Est. Repairs</label>
+                        <input id="acq-est-repairs" type="number" min="0" step="0.01" oninput="updateAcquisitionCalculator()" placeholder="1200"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-[13px] font-medium text-slate-400 mb-1">Profit at Current Bid</label>
+                        <div id="acq-profit-preview" class="min-h-[42px] flex items-center rounded-xl px-3 py-2 text-sm font-semibold border border-slate-700 bg-slate-800 text-slate-300">$0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label for="acq-notes" class="block text-[13px] font-medium text-slate-400 mb-1">Notes</label>
+                <textarea id="acq-notes" rows="2" placeholder="Damage, title notes, seller details, things to inspect..."
+                          class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"></textarea>
+            </div>
+
+            <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-800">
+                <button type="button" onclick="closeModal('modal-acquisition')" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-400 hover:text-white">Cancel</button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white">
+                    Save to Pipeline
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Mark Acquisition Won / Purchased -->
+<div id="modal-acquisition-won" role="dialog" aria-modal="true" class="app-modal fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-5 sm:p-6">
+        <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+            <div>
+                <h3 class="text-lg font-bold text-white"><i class="fa-solid fa-trophy text-blue-400 mr-2"></i>Mark Vehicle Won</h3>
+                <p id="acq-won-vehicle" class="text-xs text-slate-500 mt-1">---</p>
+            </div>
+            <button type="button" onclick="closeModal(\'modal-acquisition-won\')" aria-label="Close" class="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <form onsubmit="handleMarkAcquisitionWon(event)" class="space-y-4">
+            <input type="hidden" id="acq-won-id">
+            <div>
+                <label for="acq-won-price" class="block text-[13px] font-medium text-slate-400 mb-1">Final Purchase Price *</label>
+                <input id="acq-won-price" type="number" min="0" step="0.01" required
+                       class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label for="acq-won-date" class="block text-[13px] font-medium text-slate-400 mb-1">Purchase Date *</label>
+                    <input id="acq-won-date" type="date" required
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="acq-transport-eta" class="block text-[13px] font-medium text-slate-400 mb-1">Estimated Arrival</label>
+                    <input id="acq-transport-eta" type="date"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+            <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-800">
+                <button type="button" onclick="closeModal('modal-acquisition-won')" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-400 hover:text-white">Cancel</button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white">
+                    Move to Transport
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 4: Vehicle Detail Breakdown -->
+<div id="modal-car-detail" role="dialog" aria-modal="true" class="app-modal fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6">
+        <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+            <div>
+                <h3 class="text-xl font-semibold text-white" id="detail-title">Vehicle Detail</h3>
+                <p class="text-xs text-slate-400 num" id="detail-vin">VIN: ---</p>
+            </div>
+            <button type="button" onclick="closeModal(\'modal-car-detail\')" aria-label="Close" class="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div id="detail-content" class="space-y-6">
+            <!-- Rendered dynamically -->
+        </div>
+    </div>
+</div>
+
+<!-- AutoMedusa Login -->
+<div id="auth-overlay" class="fixed inset-0 z-[100] automedusa-video-login overflow-hidden">
+    <video
+        id="automedusa-login-video"
+        class="automedusa-login-video"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="auto"
+        aria-hidden="true">
+        <source src="/medusa-animation.mp4" type="video/mp4">
+    </video>
+
+    <div class="automedusa-login-form-wrap">
+        <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="automedusa-login-form" novalidate>
+            <div class="text-center mb-5">
+                <h1 class="text-[28px] font-semibold tracking-tight text-white">AutoMedusa</h1>
+                <p id="auth-subtitle" class="text-[15px] text-slate-300 mt-1">Sign in to your dealership.</p>
+            </div>
+            <div class="automedusa-login-fields">
+                <div id="auth-email-row">
+                    <label class="sr-only" for="auth-email">Email</label>
+                    <input id="auth-email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required
+                           class="automedusa-login-input w-full rounded-xl px-4 py-3 text-[17px] text-white focus:outline-none transition"
+                           placeholder="Email">
+                </div>
+
+                <div id="auth-password-row">
+                    <label class="sr-only" for="auth-password">Password</label>
+                    <input id="auth-password" type="password" autocomplete="current-password" required
+                           class="automedusa-login-input w-full rounded-xl px-4 py-3 text-[17px] text-white focus:outline-none transition"
+                           placeholder="Password">
+                </div>
+
+                <p id="auth-error" role="alert" class="text-[13px] text-rose-300 hidden"></p>
+                <p id="auth-info" role="status" class="text-[13px] text-slate-300 hidden"></p>
+
+                <button id="auth-submit" type="submit"
+                        class="w-full rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 px-4 py-3 text-[17px] font-semibold text-white transition disabled:opacity-60">
+                    Sign in
+                </button>
+
+                <button id="auth-mode-toggle" type="button" onclick="toggleAuthMode()"
+                        class="mx-auto block text-[15px] text-blue-400 hover:text-blue-300 py-2 min-h-[44px]">
+                    Forgot password?
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- Global confirmation sheet (delete, and other actions that need a yes/no) -->
+<div id="delete-confirm-modal"
+     class="fixed inset-0 z-[160] hidden items-center justify-center p-4 bg-black/60"
+     role="alertdialog"
+     aria-modal="true"
+     aria-labelledby="delete-confirm-title"
+     aria-describedby="delete-confirm-message">
+    <div class="w-full max-w-sm rounded-2xl bg-slate-900 shadow-2xl overflow-hidden text-center">
+        <div class="px-5 pt-6 pb-5">
+            <h3 id="delete-confirm-title" class="text-[17px] font-semibold text-white">Confirm deletion</h3>
+            <p id="delete-confirm-message" class="mt-2 text-[15px] leading-6 text-slate-400">
+                Are you sure you want to delete this record?
+            </p>
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row border-t border-slate-800">
+            <button id="delete-confirm-cancel" type="button"
+                    class="flex-1 min-h-[48px] px-4 py-3 text-[17px] text-blue-400 hover:bg-slate-800 transition">
+                Cancel
+            </button>
+            <button id="delete-confirm-accept" type="button"
+                    class="flex-1 min-h-[48px] px-4 py-3 text-[17px] font-semibold text-rose-400 hover:bg-slate-800 border-b sm:border-b-0 sm:border-l border-slate-800 transition">
+                Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notifications Container -->
+<div id="toast-container" role="status" aria-live="polite" class="fixed bottom-5 right-5 z-[110] space-y-2 pointer-events-none max-w-sm"></div>
+
+</body>
+</html>
