@@ -1579,7 +1579,6 @@ function acqDetail(acq) {
         ${acq.auctionAt ? field('Auction', formatDateTime(acq.auctionAt)) : ''}
         ${acq.vin ? field('VIN', acq.vin, { mono: true }) : ''}
         ${acq.mileage ? field('Mileage', `${Number(acq.mileage).toLocaleString(LOCALE)} km`) : ''}
-        ${field('Type', acq.vehicleType || 'Other')}
         ${href ? `<a class="field field-action" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open listing<i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" style="margin-left:auto;font-size:13px"></i></a>` : ''}
     </div>
     ${acq.notes ? `<h3 class="detail-section-title">Notes</h3><div class="group"><div class="field"><span class="row-sub detail-note" style="color:var(--label);padding:11px 0">${esc(acq.notes)}</span></div></div>` : ''}`;
